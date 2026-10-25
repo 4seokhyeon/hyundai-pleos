@@ -1,15 +1,59 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# Gradle / Kotlin generated files
+.gradle/
+.kotlin/
+**/build/
+
+# Local Android SDK paths and machine-specific settings
 local.properties
+
+# Android Studio local state (keep shared project settings in Git)
+*.iml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/shelf/
+.idea/httpRequests/
+.idea/usage.statistics.xml
+.idea/deploymentTargetDropDown.xml
+
+# Native build outputs
+.externalNativeBuild/
+.cxx/
+
+# macOS / editor temporary files
+.DS_Store
+.AppleDouble
+.LSOverride
+*~
+*.swp
+*.swo
+
+# Debugging and profiling outputs
+/captures/
+*.log
+*.hprof
+*.trace
+
+# Signing keys and private credentials
+*.jks
+*.keystore
+*.key
+*.p12
+*.pfx
+keystore.properties
+signing.properties
+secrets.properties
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Generated app packages; explicitly allow contest submission APKs in /apk/
+*.apk
+*.aab
+!/apk/*.apk
+
+# Preserve gradlew, gradlew.bat, gradle/wrapper/ and source assets in Git.
