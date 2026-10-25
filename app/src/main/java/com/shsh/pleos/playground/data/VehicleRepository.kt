@@ -49,6 +49,7 @@ class VehicleRepository(context: Context) {
         if (config.accessType != AccessType.READ && config.accessType != AccessType.READ_WRITE) {
             throw DoorUnsupportedException("문 위치 읽기 미지원: ${config.accessType}")
         }
+        //
         if (bounds == null) throw DoorUnsupportedException("ROW_1_LEFT 영역이 지원 목록에 없습니다")
         val value = suspendCancellableCoroutine<Int?> { continuation ->
             door.getCurrentDoorPosition(
