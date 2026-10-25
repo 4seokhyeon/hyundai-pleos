@@ -1,5 +1,9 @@
 [versions]
 pleosVehicle = "2.3.2"
+pleosNaviHelper = "3.0.5"
+pleosTts = "3.3.1"
+pleosStt = "3.3.1"
+pleosFusedLocation = "1.1.3"
 agp = "9.2.1"
 coreKtx = "1.18.0"
 junit = "4.13.2"
@@ -11,6 +15,10 @@ kotlin = "2.2.10"
 composeBom = "2026.02.01"
 
 [libraries]
+pleos-fusedlocation = { module = "ai.pleos.playground:FusedLocation", version.ref = "pleosFusedLocation" }
+pleos-stt = { module = "ai.pleos.playground:SpeechToText", version.ref = "pleosStt" }
+pleos-tts = { module = "ai.pleos.playground:TextToSpeech", version.ref = "pleosTts" }
+pleos-navihelper = { module = "ai.pleos.playground:NaviHelper", version.ref = "pleosNaviHelper" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleRuntimeKtx" }
 
