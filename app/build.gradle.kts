@@ -1,9 +1,23 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
+
+// Development-only key: local.properties stays untracked, but debug APK contains this value.
+val localSettings = Properties().apply {
+    val source = rootProject.file("local.properties")
+    if (source.isFile) source.inputStream().use { load(it) }
+}
+val youtubeDevelopmentKey = localSettings.getProperty("YOUTUBE_API_KEY", "").trim()
+require(youtubeDevelopmentKey.isEmpty() || youtubeDevelopmentKey.matches(Regex("[A-Za-z0-9_-]+"))) {
+    "YOUTUBE_API_KEY must contain only the unquoted API key; check local.properties"
+}
+
 android {
+    useLibrary("android.car")
     namespace = "com.shsh.pleos.playground"
     compileSdk {
         version = release(36) {
@@ -17,11 +31,15 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "YOUTUBE_API_KEY", "\"\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeDevelopmentKey\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -36,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

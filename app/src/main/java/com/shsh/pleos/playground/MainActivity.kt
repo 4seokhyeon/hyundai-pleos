@@ -1,5 +1,7 @@
 package com.shsh.pleos.playground
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -18,10 +20,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.shsh.pleos.playground.ui.probe.RecordingProbeSection
+import com.shsh.pleos.playground.ui.probe.RecordingProbeViewModel
 import com.shsh.pleos.playground.ui.probe.LocationProbeSection
 import com.shsh.pleos.playground.ui.probe.LocationProbeViewModel
 import com.shsh.pleos.playground.ui.probe.NaviProbeUiState
@@ -42,6 +47,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val model: VehicleProbeViewModel = viewModel()
             val state by model.uiState.collectAsStateWithLifecycle()
+            val recordingModel: RecordingProbeViewModel = viewModel()
             val locationModel: LocationProbeViewModel = viewModel()
             val sttModel: SttProbeViewModel = viewModel()
             val ttsModel: TtsProbeViewModel = viewModel()
@@ -49,7 +55,7 @@ class MainActivity : ComponentActivity() {
             val naviState by naviModel.uiState.collectAsStateWithLifecycle()
             PleosSdkPlaygroundTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    ProbeScreen(state, model::refresh, naviState, naviModel::connect, ttsModel, sttModel, locationModel, Modifier.padding(padding))
+                    ProbeScreen(state, model::refresh, naviState, naviModel::connect, ttsModel, sttModel, locationModel, recordingModel, Modifier.padding(padding))
                 }
             }
         }
@@ -65,18 +71,33 @@ private fun ProbeScreen(
     ttsModel: TtsProbeViewModel,
     sttModel: SttProbeViewModel,
     locationModel: LocationProbeViewModel,
+    recordingModel: RecordingProbeViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val recordingState by recordingModel.uiState.collectAsStateWithLifecycle()
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         Text("Pleos SDK 검증", style = MaterialTheme.typography.headlineLarge)
+        Button(onClick = {
+            recordingModel.leave(); sttModel.stop(); ttsModel.stop()
+            context.startActivity(Intent(context, VideoProbeActivity::class.java))
+        }, enabled = Build.VERSION.SDK_INT >= 29 && !recordingState.busy && !recordingState.playing) {
+            Text("한국곡 영상·주행 제한 검증 열기")
+        }
+        RecordingProbeSection(recordingModel) { sttModel.stop(); ttsModel.stop() }
+        HorizontalDivider()
         LocationProbeSection(locationModel)
         HorizontalDivider()
-        SttProbeSection(sttModel, ttsModel::stop)
-        HorizontalDivider()
-        TtsProbeSection(ttsModel, sttModel::stop)
+        if (!recordingState.busy && !recordingState.playing) {
+            SttProbeSection(sttModel, ttsModel::stop)
+            HorizontalDivider()
+            TtsProbeSection(ttsModel, sttModel::stop)
+        } else {
+            Text("녹음 검증 중에는 STT·TTS 조작을 잠시 숨깁니다")
+        }
         HorizontalDivider()
         Text("NaviHelper 3.0.5 · 경로 상태 조회", style = MaterialTheme.typography.titleLarge)
         Text(naviState.status, style = MaterialTheme.typography.headlineSmall)

@@ -57,3 +57,16 @@ secrets.properties
 !/apk/*.apk
 
 # Preserve gradlew, gradlew.bat, gradle/wrapper/ and source assets in Git.
+
+# Python experiments, model weights and private recordings
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+/experiments/singmos/results/
+/experiments/singmos/samples/*
+!/experiments/singmos/samples/.gitkeep
+*.pt
+*.pth
+*.ckpt
+/server/uploads/

@@ -1,0 +1,8 @@
+# Compatibility candidate for s3prl legacy audio backend imports.
+# Not a tested lockfile. Save the resolved environment after the user verifies it.
+torch==2.5.1
+torchaudio==2.5.1
+librosa
+s3prl==0.4.18
+soundfile
+numpy
