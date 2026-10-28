@@ -17,7 +17,24 @@ SAMPLE_RATE = 16000
 LOG = logging.getLogger("SHSH_SCORE")
 
 
-def evaluate(args: argparse.Namespace) -> dict:
+def load_predictor(model: str, threads: int = 4):
+    """Load once for a server, or per invocation for the original CLI."""
+    import torch
+
+    if model not in ("singmos_pro", "singmos_v1") or threads < 1:
+        raise ValueError("Invalid model or threads")
+    torch.set_num_threads(threads)
+    torch.manual_seed(0)
+    LOG.info("Loading model; repository=%s, model=%s, device=cpu. First run downloads code and weights.", REPOSITORY, model)
+    started = time.perf_counter()
+    predictor = torch.hub.load(REPOSITORY, model, trust_repo=True)
+    predictor = predictor.to("cpu").eval()
+    seconds = time.perf_counter() - started
+    LOG.info("Model loaded; seconds=%.2f", seconds)
+    return predictor, seconds
+
+
+def evaluate(args: argparse.Namespace, predictor=None) -> dict:
     # Import only when evaluating; --help needs no ML packages.
     import librosa
     import numpy as np
@@ -48,14 +65,11 @@ def evaluate(args: argparse.Namespace) -> dict:
     if original_sr != SAMPLE_RATE:
         wave = librosa.resample(wave, orig_sr=original_sr, target_sr=SAMPLE_RATE)
     wave = np.ascontiguousarray(wave, dtype=np.float32)
-    torch.set_num_threads(args.threads)
-    torch.manual_seed(0)
-    LOG.info("Loading model; repository=%s, model=%s, device=cpu. First run downloads code and weights.", REPOSITORY, args.model)
-    load_started = time.perf_counter()
-    predictor = torch.hub.load(REPOSITORY, args.model, trust_repo=True)
-    predictor = predictor.to("cpu").eval()
-    load_seconds = time.perf_counter() - load_started
-    LOG.info("Model loaded; seconds=%.2f", load_seconds)
+    if predictor is None:
+        predictor, load_seconds = load_predictor(args.model, args.threads)
+    else:
+        load_seconds = 0.0
+        LOG.info("Using preloaded model; model=%s, device=cpu", args.model)
     samples = torch.from_numpy(wave).unsqueeze(0)
     lengths = torch.tensor([samples.shape[1]], dtype=torch.long)
     LOG.info("Inference started")

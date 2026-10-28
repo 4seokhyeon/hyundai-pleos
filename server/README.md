@@ -1,5 +1,7 @@
 # 로컬 한국곡 검색 서버
 
+채점 서버는 별도 파일 `score_server.py`이며 최신 시작 방법은 [SingMOS 서버 안내](../docs/SCORING_SERVER.md)를 따른다.
+
 > 이전 중계 방식의 참고 코드다. 현재 Android 앱은 YouTube API를 직접 호출하므로 서버를 켤 필요가 없다. 최신 절차는 ../docs/YOUTUBE_DIRECT_SEARCH.md를 따른다.
 
 YouTube Data API v3의 search.list를 중계하는 개발용 서버다. Python 표준 라이브러리만 사용한다. API 키는 프로젝트 루트 local.properties에서 읽고, 없으면 환경변수에서 읽으며 앱·Git·로그에는 저장하지 않는다. 현재 설치·실행·검색 호출은 미검증이다.
