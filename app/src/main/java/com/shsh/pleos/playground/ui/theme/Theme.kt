@@ -1,58 +1,40 @@
 package com.shsh.pleos.playground.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+object PleosColors {
+    val Background = Color(0xFF071014)
+    val Panel = Color(0xFF0D181E)
+    val Card = Color(0xFF132128)
+    val Raised = Color(0xFF172831)
+    val Border = Color(0xFF263940)
+    val Text = Color(0xFFF2F7F6)
+    val Muted = Color(0xFF8DA0A4)
+    val Mint = Color(0xFF3DDCB4)
+    val Green = Color(0xFF59D58E)
+    val Amber = Color(0xFFF3B74D)
+    val Recording = Color(0xFFF05C67)
+}
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val PleosScheme = darkColorScheme(
+    primary = PleosColors.Mint, onPrimary = PleosColors.Background,
+    secondary = PleosColors.Amber, onSecondary = PleosColors.Background,
+    background = PleosColors.Background, onBackground = PleosColors.Text,
+    surface = PleosColors.Panel, onSurface = PleosColors.Text,
+    surfaceVariant = PleosColors.Card, onSurfaceVariant = PleosColors.Muted,
+    outline = PleosColors.Border, error = PleosColors.Amber,
+    onError = PleosColors.Background
 )
 
 @Composable
-fun PleosSdkPlaygroundTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+fun PleosSdkPlaygroundTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = PleosScheme, typography = Typography,
+        shapes = Shapes(small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(20.dp), large = RoundedCornerShape(28.dp)),
+        content = content)
 }

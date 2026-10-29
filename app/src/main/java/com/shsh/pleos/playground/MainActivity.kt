@@ -1,5 +1,12 @@
 package com.shsh.pleos.playground
 
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.TextButton
+import com.shsh.pleos.playground.ui.karaoke.KaraokeHome
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -42,9 +49,29 @@ import com.shsh.pleos.playground.ui.theme.PleosSdkPlaygroundTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i("SHSH_APP", "Five SDK probe screen started")
+        Log.i("SHSH_APP", "Karaoke home started; dark design applied")
         enableEdgeToEdge()
         setContent {
+            var diagnostics by rememberSaveable { mutableStateOf(false) }
+            BackHandler(enabled = diagnostics) { diagnostics = false }
+            if (!diagnostics) {
+                PleosSdkPlaygroundTheme {
+                    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+                        androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
+                            val openKaraoke: (String) -> Unit = { action ->
+                                Log.i("SHSH_APP", "User opened Figma-style karaoke; entry=$action")
+                                if (Build.VERSION.SDK_INT >= 29) {
+                                    startActivity(Intent(this@MainActivity, VideoProbeActivity::class.java).putExtra("entry_action", action))
+                                } else android.widget.Toast.makeText(this@MainActivity, "Android 10 이상에서 이용할 수 있어요", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            KaraokeHome(onStart = { openKaraoke("search") },
+                                onVoice = { openKaraoke("voice") }, onVocal = { openKaraoke("vocal_only") },
+                                onDiagnostics = { diagnostics = true })
+                        }
+                    }
+                }
+                return@setContent
+            }
             val model: VehicleProbeViewModel = viewModel()
             val state by model.uiState.collectAsStateWithLifecycle()
             val recordingModel: RecordingProbeViewModel = viewModel()
@@ -53,9 +80,15 @@ class MainActivity : ComponentActivity() {
             val ttsModel: TtsProbeViewModel = viewModel()
             val naviModel: NaviProbeViewModel = viewModel()
             val naviState by naviModel.uiState.collectAsStateWithLifecycle()
+            DisposableEffect(Unit) {
+                onDispose { recordingModel.leave(); sttModel.stop(); ttsModel.stop() }
+            }
             PleosSdkPlaygroundTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    ProbeScreen(state, model::refresh, naviState, naviModel::connect, ttsModel, sttModel, locationModel, recordingModel, Modifier.padding(padding))
+                    Column(Modifier.padding(padding)) {
+                        TextButton(onClick = { diagnostics = false }) { Text("← 홈으로") }
+                        ProbeScreen(state, model::refresh, naviState, naviModel::connect, ttsModel, sttModel, locationModel, recordingModel, Modifier.weight(1f))
+                    }
                 }
             }
         }
