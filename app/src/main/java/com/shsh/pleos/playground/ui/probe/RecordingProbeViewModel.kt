@@ -24,6 +24,9 @@ data class RecordingProbeUiState(
     val busy: Boolean = false,
     val exporting: Boolean = false,
     val scoring: Boolean = false,
+    val analysisStarted: Boolean = false,
+    val error: String? = null,
+    val scoreError: String? = null,
     val inputKind: String? = null,
     val scoreStatus: String = "평가 전 · 파일 전송 버튼을 눌러야 전송됩니다",
     val score: ScoreResult? = null,
@@ -46,7 +49,7 @@ class RecordingProbeViewModel(application: Application) : AndroidViewModel(appli
 
     fun permissionResult(granted: Boolean) {
         Log.i("SHSH_RECORD", "Runtime permission result; granted=$granted")
-        mutableState.update { it.copy(status = if (granted) "권한 허용됨 · 녹음 시작을 다시 누르세요" else "마이크 권한 거절됨") }
+        mutableState.update { it.copy(status = if (granted) "권한 허용됨 · 녹음 시작을 다시 누르세요" else "마이크 권한 거절됨", error = if (granted) null else "마이크 권한을 허용한 뒤 다시 녹음해 주세요.") }
     }
 
     fun start() = startRecording(null)
@@ -73,7 +76,7 @@ class RecordingProbeViewModel(application: Application) : AndroidViewModel(appli
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 Log.e("SHSH_RECORD", "Recording failed; type=${error.javaClass.simpleName}", error)
-                mutableState.value = RecordingProbeUiState(status = "녹음 실패", detail = error.message ?: "SHSH_RECORD 로그 확인")
+                mutableState.value = RecordingProbeUiState(status = "녹음 실패", error = "마이크 연결과 권한을 확인한 뒤 다시 녹음해 주세요.", detail = error.message ?: "SHSH_RECORD 로그 확인")
             } finally {
                 mutableState.update { it.copy(busy = false, recording = false) }
             }
@@ -92,7 +95,7 @@ class RecordingProbeViewModel(application: Application) : AndroidViewModel(appli
     }
 
     private fun playbackEnded(status: String = "재생 종료 · 실제 목소리 청취 여부를 확인하세요") {
-        mutableState.update { it.copy(playing = false, status = status) }
+        mutableState.update { it.copy(playing = false, status = status, error = if (status == "재생 실패") "녹음 파일을 재생하지 못했어요. 다시 녹음해 주세요." else it.error) }
     }
 
     fun stopPlayback() { repository.stopPlayback(); playbackEnded("재생 중지") }
@@ -130,23 +133,25 @@ class RecordingProbeViewModel(application: Application) : AndroidViewModel(appli
         val file = result?.file ?: return
         if (mutableState.value.busy || mutableState.value.playing || mutableState.value.exporting || mutableState.value.scoring) return
         val inputKind = mutableState.value.inputKind ?: return
-        mutableState.update { it.copy(scoring = true, score = null, scoreStatus = "파일 전송 준비 중") }
+        mutableState.update { it.copy(scoring = true, analysisStarted = false, score = null, scoreError = null, scoreStatus = "파일 전송 준비 중") }
         scoringJob = viewModelScope.launch {
             try {
                 val score = scoringRepository.score(file, inputKind) { status ->
-                    mutableState.update { it.copy(scoreStatus = status) }
+                    mutableState.update { it.copy(scoreStatus = status, analysisStarted = it.analysisStarted || status.startsWith("평가 대기") || status.startsWith("SingMOS 평가")) }
                 }
                 mutableState.update { it.copy(score = score, scoreStatus = "평가 완료 · 선택한 녹음 조건의 품질 예측값") }
             } catch (error: CancellationException) {
-                mutableState.update { it.copy(scoreStatus = if (error is TimeoutCancellationException) "평가 시간 초과 · 서버 상태 확인 필요" else "평가 취소 · 이미 전송된 서버 작업은 정리 요청") }
+                mutableState.update { it.copy(scoreStatus = if (error is TimeoutCancellationException) "평가 시간 초과 · 서버 상태 확인 필요" else "평가 취소 · 이미 전송된 서버 작업은 정리 요청", scoreError = if (error is TimeoutCancellationException) "분석 시간이 초과됐어요. 잠시 후 다시 시도해 주세요." else it.scoreError) }
                 if (error !is TimeoutCancellationException) throw error
             } catch (error: Exception) {
                 val message = (error as? ScoringException)?.message ?: "평가 처리 실패 · SHSH_SCORE 로그를 확인하세요"
-                mutableState.update { it.copy(scoreStatus = message) }
+                mutableState.update { it.copy(scoreStatus = message, scoreError = "녹음 분석을 완료하지 못했어요. 채점 서버와 네트워크 상태를 확인한 뒤 다시 전송해 주세요.") }
                 Log.e("SHSH_SCORE", "Evaluation failed; reason=${(error as? ScoringException)?.reason ?: "client_error"}")
             } finally { mutableState.update { it.copy(scoring = false) } }
         }
     }
+
+    fun clearErrors() { mutableState.update { it.copy(error = null, scoreError = null) } }
 
     fun cancelScoring() {
         if (scoringJob?.isActive == true) {

@@ -15,7 +15,7 @@ object PleosColors {
     val Raised = Color(0xFF172831)
     val Border = Color(0xFF263940)
     val Text = Color(0xFFF2F7F6)
-    val Muted = Color(0xFF8DA0A4)
+    val Muted = Color(0xFFB6C7CC)
     val Mint = Color(0xFF3DDCB4)
     val Green = Color(0xFF59D58E)
     val Amber = Color(0xFFF3B74D)

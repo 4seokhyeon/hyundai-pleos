@@ -1,6 +1,7 @@
 package com.shsh.pleos.playground
 
 import com.shsh.pleos.playground.ui.karaoke.KaraokeWorkspace
+import com.shsh.pleos.playground.data.Song
 import android.annotation.SuppressLint
 import android.Manifest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,6 +36,8 @@ class VideoProbeActivity : ComponentActivity() {
     private var detail by mutableStateOf("제한 상태 미확인")
     private var loadedId by mutableStateOf<String?>(null)
     private var status by mutableStateOf("곡을 검색해서 선택하세요")
+    private var selectedSong by mutableStateOf<Song?>(null)
+    private var playerError by mutableStateOf<String?>(null)
     private lateinit var searchModel: SongSearchViewModel
     private lateinit var recordingModel: RecordingProbeViewModel
     private var playerState by mutableStateOf(-1)
@@ -52,9 +55,6 @@ class VideoProbeActivity : ComponentActivity() {
     private var monitor: DrivingRestrictionsMonitor? = null
     private var resumed = false
     private var voiceEntryConsumed = false
-    // A local recording-consent dialog is part of the foreground playback UI.
-    // Backgrounding/UX restrictions still stop playback via onPause/the monitor.
-    private var recordingConsentOpening = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +74,9 @@ class VideoProbeActivity : ComponentActivity() {
                     searchModel.voiceSearch()
                 }
             }
+            LaunchedEffect(recording.error) {
+                if (recording.error != null && loadedId != null) stopPlayer("녹음 오류로 재생 중지")
+            }
             LaunchedEffect(recording.busy) {
                 if (recording.busy) uploadConsent = false
             }
@@ -88,7 +91,7 @@ class VideoProbeActivity : ComponentActivity() {
                     allowed = allowed && resumed, mode = recordingMode,
                     hasPlayer = loadedId != null, playerReady = playerState == 1,
                     status = status, search = search, recording = recording,
-                    consent = consent, uploadConsent = uploadConsent,
+                    selectedSong = selectedSong, playerError = playerError,
                     onMode = { mode ->
                         searchModel.cancel()
                         stopPlayer("녹음 모드 변경")
@@ -99,12 +102,13 @@ class VideoProbeActivity : ComponentActivity() {
                     onEdit = searchModel::edit, onSearch = searchModel::search,
                     onVoice = searchModel::voiceSearch, onSearchCancel = searchModel::cancel,
                     onSong = { song ->
-                        playerState = -1; consent = false; loadedId = song.videoId
+                        stopPlayer("사용자가 새 곡을 선택함")
+                        playerState = -1; consent = false; playerError = null; selectedSong = song; loadedId = song.videoId
                         status = "${song.title} · 공식 플레이어에서 재생을 누르세요"
                     },
                     onConsent = { consent = it }, onUploadConsent = { uploadConsent = it },
                     onRecord = {
-                        if (allowed && resumed) {
+                        if (allowed && resumed && consent) {
                             if (!recordingModel.hasPermission()) permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             else recordingMode?.let { mode ->
                                 if (mode == "vocal_only" || (loadedId != null && playerState == 1)) {
@@ -117,12 +121,15 @@ class VideoProbeActivity : ComponentActivity() {
                     onFinish = recordingModel::finish,
                     onListen = recordingModel::play, onStopListen = recordingModel::stopPlayback,
                     onDelete = { recordingModel.delete(); uploadConsent = false; consent = false },
-                    onRecordConsentOpen = { recordingConsentOpening = true },
-                    onScore = recordingModel::scoreRecording, onCancelScore = recordingModel::cancelScoring,
+                    onRecordConsentOpen = {},
+                    onScore = { if (allowed && resumed && uploadConsent) recordingModel.scoreRecording() }, onCancelScore = recordingModel::cancelScoring,
                     onClosePlayer = { stopPlayer("사용자가 플레이어를 닫음") }, onHome = { finish() },
+                    onClearErrors = { playerError = null; searchModel.clearError(); recordingModel.clearErrors() },
                     player = {
                         loadedId?.let { id ->
-                            AndroidView(factory = { createPlayer(id) }, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                            androidx.compose.runtime.key(id) {
+                                AndroidView(factory = { createPlayer(id) }, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                            }
                         }
                     }
                 )
@@ -139,7 +146,7 @@ class VideoProbeActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        resumed = false; allowed = false; recordingConsentOpening = false
+        resumed = false; allowed = false
         searchModel.cancel()
         stopPlayer("화면 비활성화로 중지")
         monitor?.close(); monitor = null
@@ -148,8 +155,7 @@ class VideoProbeActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) recordingConsentOpening = false
-        if (!hasFocus && loadedId != null && !recordingConsentOpening) stopPlayer("창 포커스 상실로 중지")
+        if (!hasFocus && loadedId != null) stopPlayer("창 포커스 상실로 중지")
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -188,6 +194,7 @@ class VideoProbeActivity : ComponentActivity() {
                                 else -> "영상 재생 오류 ${errorCode ?: "unknown"} · 다른 결과를 선택하거나 로그를 확인하세요"
                             }
                             stopPlayer(message)
+                            playerError = message
                         } else {
                             status = when (event) {
                                 "Ready" -> "플레이어 준비 완료 · 화면의 재생 버튼을 누르세요"

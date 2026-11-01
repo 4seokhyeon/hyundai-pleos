@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SongSearchUiState(val query: String = "", val busy: Boolean = false, val listening: Boolean = false,
-    val message: String = "곡 제목과 가수를 입력하거나 음성 검색을 누르세요", val songs: List<Song> = emptyList())
+    val message: String = "곡 제목과 가수를 입력하거나 음성 검색을 누르세요", val songs: List<Song> = emptyList(), val error: String? = null)
 
 class SongSearchViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SongRepository(application)
@@ -24,13 +24,13 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
     private val mutableState = MutableStateFlow(SongSearchUiState())
     val uiState = mutableState.asStateFlow()
     private var work: Job? = null
-    fun edit(text: String) { if (!mutableState.value.busy) mutableState.update { it.copy(query = text.take(120)) } }
+    fun edit(text: String) { if (!mutableState.value.busy) mutableState.update { it.copy(query = text.take(120), error = null) } }
     fun search() {
         if (mutableState.value.busy) return
         val query = mutableState.value.query.trim()
         if (query.isEmpty()) { mutableState.update { it.copy(message = "곡 제목을 입력하세요") }; return }
         work = viewModelScope.launch {
-            mutableState.update { it.copy(busy = true, message = "YouTube에서 검색 중", songs = emptyList()) }
+            mutableState.update { it.copy(busy = true, error = null, message = "YouTube에서 검색 중", songs = emptyList()) }
             try { performSearch(query) }
             catch (error: CancellationException) { throw error }
             catch (error: Exception) { fail(error) }
@@ -44,7 +44,7 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
     fun voiceSearch() {
         if (mutableState.value.busy) return
         work = viewModelScope.launch {
-            mutableState.update { it.copy(busy = true, listening = true, songs = emptyList(), message = "음성 검색 준비 중") }
+            mutableState.update { it.copy(busy = true, listening = true, error = null, songs = emptyList(), message = "음성 검색 준비 중") }
             try {
                 stt.initialize()
                 val result = stt.recognize { message, text ->
@@ -86,8 +86,9 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
             is SongSearchException -> error.message ?: "검색 실패"
             else -> "검색 처리 실패: ${error.javaClass.simpleName} · SHSH_SEARCH의 Cause와 at 로그를 확인하세요"
         }
-        mutableState.update { it.copy(message = message) }
+        mutableState.update { it.copy(message = message, error = "노래를 검색하지 못했어요. 인터넷 연결을 확인하거나 곡명과 가수를 바꿔서 다시 시도해 주세요.") }
     }
+    fun clearError() { mutableState.update { it.copy(error = null, message = "곡 제목과 가수를 입력하거나 음성 검색을 누르세요") } }
     fun cancel() { work?.cancel(); stt.stop(); mutableState.update { it.copy(message = "검색 중지") } }
     override fun onCleared() { work?.cancel(); stt.close(); super.onCleared() }
 }

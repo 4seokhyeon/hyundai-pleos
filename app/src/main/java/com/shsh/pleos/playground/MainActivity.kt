@@ -47,6 +47,18 @@ import com.shsh.pleos.playground.ui.probe.VehicleProbeViewModel
 import com.shsh.pleos.playground.ui.theme.PleosSdkPlaygroundTheme
 
 class MainActivity : ComponentActivity() {
+    private var homeAllowed by mutableStateOf(false)
+    private var homeMonitor: com.shsh.pleos.playground.platform.DrivingRestrictionsMonitor? = null
+
+    override fun onResume() {
+        super.onResume()
+        homeAllowed = false
+        homeMonitor = com.shsh.pleos.playground.platform.DrivingRestrictionsMonitor(this) { permit, _ -> homeAllowed = permit }.also { it.start() }
+    }
+    override fun onPause() {
+        homeAllowed = false; homeMonitor?.close(); homeMonitor = null
+        super.onPause()
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.i("SHSH_APP", "Karaoke home started; dark design applied")
@@ -66,7 +78,7 @@ class MainActivity : ComponentActivity() {
                             }
                             KaraokeHome(onStart = { openKaraoke("search") },
                                 onVoice = { openKaraoke("voice") }, onVocal = { openKaraoke("vocal_only") },
-                                onDiagnostics = { diagnostics = true })
+                                onDiagnostics = { diagnostics = true }, allowed = homeAllowed)
                         }
                     }
                 }

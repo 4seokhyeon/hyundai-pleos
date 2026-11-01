@@ -26,6 +26,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PleosSdkPlayground">
         <activity android:name=".VideoProbeActivity" android:exported="false" />
+        <activity android:name=".PublicDataProbeActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

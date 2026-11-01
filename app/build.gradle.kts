@@ -16,6 +16,16 @@ require(youtubeDevelopmentKey.isEmpty() || youtubeDevelopmentKey.matches(Regex("
     "YOUTUBE_API_KEY must contain only the unquoted API key; check local.properties"
 }
 
+
+// Debug-only public-data credentials. Never log values or include them in release builds.
+fun quotedPublicDataKey(propertyName: String): String {
+    val value = localSettings.getProperty(propertyName, "").trim()
+    require(value.none { it.isISOControl() }) { "$propertyName must be a single-line key" }
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+}
+val ggDataDevelopmentKey = quotedPublicDataKey("GG_DATA_API_KEY")
+val publicDataDevelopmentKey = quotedPublicDataKey("PUBLIC_DATA_API_KEY")
+
 android {
     useLibrary("android.car")
     namespace = "com.shsh.pleos.playground"
@@ -32,6 +42,8 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "YOUTUBE_API_KEY", "\"\"")
+        buildConfigField("String", "GG_DATA_API_KEY", "\"\"")
+        buildConfigField("String", "PUBLIC_DATA_API_KEY", "\"\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -39,6 +51,8 @@ android {
     buildTypes {
         debug {
             buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeDevelopmentKey\"")
+            buildConfigField("String", "GG_DATA_API_KEY", ggDataDevelopmentKey)
+            buildConfigField("String", "PUBLIC_DATA_API_KEY", publicDataDevelopmentKey)
         }
         release {
             isMinifyEnabled = false
