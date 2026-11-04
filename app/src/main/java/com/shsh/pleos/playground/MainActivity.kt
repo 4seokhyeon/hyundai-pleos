@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.shsh.pleos.playground.ui.probe.GleoProbeSection
 import com.shsh.pleos.playground.ui.probe.RecordingProbeSection
 import com.shsh.pleos.playground.ui.probe.RecordingProbeViewModel
 import com.shsh.pleos.playground.ui.probe.LocationProbeSection
@@ -126,6 +127,8 @@ private fun ProbeScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         Text("Pleos SDK 검증", style = MaterialTheme.typography.headlineLarge)
+        GleoProbeSection()
+        HorizontalDivider()
         Button(onClick = {
             recordingModel.leave(); sttModel.stop(); ttsModel.stop()
             context.startActivity(Intent(context, VideoProbeActivity::class.java))

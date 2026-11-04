@@ -140,7 +140,7 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
                         Surface(Modifier.weight(1f),color=C.Card,shape=RoundedCornerShape(22.dp),border=BorderStroke(1.dp,C.Border)) {
                             Row(Modifier.heightIn(min=252.dp).padding(16.dp),horizontalArrangement=Arrangement.spacedBy(20.dp)) {
                                 Surface(Modifier.width(90.dp).heightIn(min=208.dp),color=C.Raised,shape=RoundedCornerShape(16.dp)) {
-                                    Column(Modifier.padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) { Glyph("music",C.Mint,Modifier.size(38.dp)); Spacer(Modifier.height(18.dp)); Text("%02d".format(rowIndex*columns+index+1),color=C.Muted,fontSize=22.sp,lineHeight=32.sp) }
+                                    Column(Modifier.padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) { Glyph("music",C.Mint,Modifier.size(38.dp)); Spacer(Modifier.height(18.dp)); Text("${rowIndex*columns+index+1}번",color=C.Mint,fontSize=28.sp,lineHeight=38.sp) }
                                 }
                                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                                     Text(song.title,style=MaterialTheme.typography.titleMedium,maxLines=3,overflow=TextOverflow.Ellipsis)
@@ -156,7 +156,7 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
                     if(row.size<columns) Spacer(Modifier.weight(1f))
                 }
             }
-            Text("YouTube 제공 · 제목과 채널을 확인해 주세요. 예약 기능은 준비 중이에요.",color=C.Muted,style=MaterialTheme.typography.bodySmall)
+            Text("Gleo에 “노래하자에서 3번 재생해줘”라고 말해 보세요. YouTube 제공 · 예약 기능은 준비 중이에요.",color=C.Muted,style=MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -256,6 +256,9 @@ fun KaraokeWorkspace(allowed: Boolean,mode: String?,hasPlayer: Boolean,playerRea
     var resetDialog by remember { mutableStateOf(false) }
     var guide by remember { mutableStateOf(false) }
     LaunchedEffect(allowed) { if(!allowed) {recordDialog=false;uploadDialog=false;resetDialog=false;guide=false} }
+    LaunchedEffect(search.busy) {
+        if(search.busy) { recordDialog=false;uploadDialog=false;resetDialog=false;guide=false }
+    }
     val requestRecord: ()->Unit = { onRecordConsentOpen();recordDialog=true }
     val openSos: ()->Unit = { context.startActivity(Intent(context,PublicDataProbeActivity::class.java)) }
     val failure=playerError ?: search.error ?: recording.scoreError ?: recording.error

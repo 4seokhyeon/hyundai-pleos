@@ -4,6 +4,12 @@ import com.shsh.pleos.playground.ui.karaoke.KaraokeWorkspace
 import com.shsh.pleos.playground.data.Song
 import android.annotation.SuppressLint
 import android.Manifest
+import android.content.Intent
+import android.os.SystemClock
+import com.shsh.pleos.playground.gleo.GleoReply
+import com.shsh.pleos.playground.gleo.GleoSearchContract
+import com.shsh.pleos.playground.gleo.GleoSearchSession
+import com.shsh.pleos.playground.gleo.sendGleoReply
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import com.shsh.pleos.playground.ui.probe.RecordingProbeViewModel
@@ -55,12 +61,21 @@ class VideoProbeActivity : ComponentActivity() {
     private var monitor: DrivingRestrictionsMonitor? = null
     private var resumed = false
     private var voiceEntryConsumed = false
+    private var gleoSession: GleoSearchSession? = null
+    private var pendingGleoQuery: String? = null
+    private var pendingSelection: List<Song>? = null
+    private var voicePlaybackId: String? = null
+    private var playerGeneration by mutableStateOf(0)
+    private var gleoSearchStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         recordingMode = if (intent.getStringExtra("entry_action") == "vocal_only") "vocal_only" else "mixed"
         searchModel = ViewModelProvider(this)[SongSearchViewModel::class.java]
         recordingModel = ViewModelProvider(this)[RecordingProbeViewModel::class.java]
+        // Never replay an external action after Activity/process recreation.
+        if (savedInstanceState == null) acceptGleoIntent(intent)
+        else GleoSearchContract.takeForwarded(intent)
         // WebView's media session owns playback focus. A second native focus owner
         // can receive LOSS as the embedded player starts and incorrectly destroy it.
         Log.i("SHSH_APP", "Karaoke workspace started; dark design applied")
@@ -102,9 +117,8 @@ class VideoProbeActivity : ComponentActivity() {
                     onEdit = searchModel::edit, onSearch = searchModel::search,
                     onVoice = searchModel::voiceSearch, onSearchCancel = searchModel::cancel,
                     onSong = { song ->
-                        stopPlayer("사용자가 새 곡을 선택함")
-                        playerState = -1; consent = false; playerError = null; selectedSong = song; loadedId = song.videoId
-                        status = "${song.title} · 공식 플레이어에서 재생을 누르세요"
+                        finishGleo(GleoReply.fail("The voice action was replaced by a manual selection.", reason = "manual_selection"))
+                        selectSong(song, voicePlayback = false)
                     },
                     onConsent = { consent = it }, onUploadConsent = { uploadConsent = it },
                     onRecord = {
@@ -127,7 +141,7 @@ class VideoProbeActivity : ComponentActivity() {
                     onClearErrors = { playerError = null; searchModel.clearError(); recordingModel.clearErrors() },
                     player = {
                         loadedId?.let { id ->
-                            androidx.compose.runtime.key(id) {
+                            androidx.compose.runtime.key(id, playerGeneration) {
                                 AndroidView(factory = { createPlayer(id) }, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
                             }
                         }
@@ -137,16 +151,140 @@ class VideoProbeActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptGleoIntent(intent)
+        startPendingGleoSearch()
+    }
+
+    private fun acceptGleoIntent(incoming: Intent) {
+        val request = GleoSearchContract.takeForwarded(incoming) ?: return
+        // A Gleo action must not accidentally trigger the app's microphone entry mode.
+        voiceEntryConsumed = true
+        if (gleoSession?.active == true) {
+            sendGleoReply(this, GleoReply.fail("A previous song search action is still in progress.", reason = "action_busy").copy(functionName = request.function), request.diagnostic)
+            return
+        }
+        gleoSession?.respond(GleoReply.fail("The previous song search action has expired.", reason = "action_expired"))
+        if (voicePlaybackId != null) stopPlayer("만료된 음성 재생 요청 정리")
+        val remaining = request.deadline - SystemClock.elapsedRealtime()
+        if (remaining <= 0 || remaining > GleoSearchContract.BUDGET_MS) {
+            sendGleoReply(this, GleoReply.fail("The song search action has expired. Please try again.", reason = "action_expired").copy(functionName = request.function), request.diagnostic)
+            return
+        }
+        if (request.function == GleoSearchContract.ACTION && request.query == null) {
+            sendGleoReply(this, GleoReply.asking(), request.diagnostic)
+            return
+        }
+        if (request.function == GleoSearchContract.SELECT_ACTION && request.index == null) {
+            sendGleoReply(this, GleoReply.askingSelection(), request.diagnostic)
+            return
+        }
+        pendingSelection = if (request.function == GleoSearchContract.SELECT_ACTION) searchModel.uiState.value.songs else null
+        pendingGleoQuery = request.query
+        gleoSearchStarted = false
+        gleoSession = GleoSearchSession(applicationContext, request) {
+            if (gleoSession?.request?.id == request.id) {
+                pendingGleoQuery = null
+                pendingSelection = null
+                if (voicePlaybackId != null) stopPlayer("음성 재생 확인 시간 초과 · 다시 요청해 주세요")
+                if (gleoSearchStarted) searchModel.cancel()
+                gleoSearchStarted = false
+            }
+            Log.w("SHSH_GLEO", "Action deadline reached; values omitted")
+        }
+        Log.i("SHSH_GLEO", "Workspace received search; waiting for foreground vehicle permission; values omitted")
+    }
+
+    private fun startPendingGleoSearch() {
+        val session = gleoSession?.takeIf { it.active } ?: return
+        if (!resumed || !allowed || gleoSearchStarted) return
+        val recording = recordingModel.uiState.value
+        if (recording.busy || recording.hasFile || recording.playing || recording.scoring || recording.exporting) {
+            finishGleo(GleoReply.fail("Finish or discard the current recording before starting another song search.", reason = "recording_conflict"))
+            return
+        }
+        if (searchModel.uiState.value.busy) {
+            finishGleo(GleoReply.fail("Another song search is in progress. Please try again after it finishes.", reason = "search_busy"))
+            return
+        }
+        if (SystemClock.elapsedRealtime() >= session.request.deadline) {
+            finishGleo(GleoReply.fail("The song search action has expired. Please try again.", reason = "action_expired"))
+            return
+        }
+        if (session.request.function == GleoSearchContract.SELECT_ACTION) {
+            val snapshot = pendingSelection
+            val current = searchModel.uiState.value.songs
+            val index = session.request.index ?: return
+            if (snapshot == null || snapshot.isEmpty() || snapshot !== current) {
+                finishGleo(GleoReply.fail("There are no unchanged search results available. Search for a song again.", reason = "results_unavailable"))
+                return
+            }
+            val song = snapshot.getOrNull(index - 1)
+            if (song == null) {
+                finishGleo(GleoReply("asking", "Choose a result number between 1 and ${snapshot.size}.", reason = "index_out_of_range"))
+                return
+            }
+            pendingSelection = null
+            gleoSearchStarted = true
+            searchModel.clearError()
+            recordingModel.clearErrors()
+            recordingMode = "mixed"
+            selectSong(song, voicePlayback = true)
+            Log.i("SHSH_GLEO", "Numbered playback requested; index=$index; waiting for player State=1")
+            return
+        }
+        val query = pendingGleoQuery ?: return
+        pendingGleoQuery = null
+        gleoSearchStarted = true
+        stopPlayer("Gleo 노래 검색으로 재생 중지")
+        playerError = null
+        recordingMode = "mixed"
+        searchModel.searchFromGleo(query, canPublish = { session.active }) { reply ->
+            // Capture this session, so an older cancelled search cannot answer a newer command.
+            session.respond(reply)
+            if (gleoSession === session) gleoSearchStarted = false
+        }
+        Log.i("SHSH_GLEO", "Existing song search started; microphone=false, autoplay=false; values omitted")
+    }
+
+    private fun selectSong(song: Song, voicePlayback: Boolean) {
+        stopPlayer("새 곡 선택")
+        playerState = -1; consent = false; playerError = null
+        selectedSong = song
+        playerGeneration += 1
+        voicePlaybackId = song.videoId.takeIf { voicePlayback }
+        loadedId = song.videoId
+        status = if (voicePlayback) "선택한 곡 재생 준비 중" else "${song.title} · 공식 플레이어에서 재생을 누르세요"
+    }
+
+    private fun finishGleo(reply: GleoReply) {
+        pendingSelection = null
+        pendingGleoQuery = null
+        gleoSession?.respond(reply)
+        gleoSearchStarted = false
+    }
+
+    override fun onDestroy() {
+        finishGleo(GleoReply.fail("The song search screen was closed before completion.", reason = "screen_closed"))
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume(); resumed = true; allowed = false
         monitor = DrivingRestrictionsMonitor(this) { permit, description ->
             allowed = permit; detail = description
-            if (!permit) { searchModel.cancel(); stopPlayer("주행 제한 또는 상태 미확인으로 중지") }
+            if (!permit) {
+                searchModel.cancel(); stopPlayer("주행 제한 또는 상태 미확인으로 중지")
+                if (gleoSearchStarted) finishGleo(GleoReply.fail("The song search stopped because the app is not in an allowed vehicle state.", reason = "vehicle_restricted"))
+            } else startPendingGleoSearch()
         }.also { it.start() }
     }
 
     override fun onPause() {
         resumed = false; allowed = false
+        finishGleo(GleoReply.fail("The song search stopped because the app left the foreground.", reason = "background"))
         searchModel.cancel()
         stopPlayer("화면 비활성화로 중지")
         monitor?.close(); monitor = null
@@ -163,7 +301,7 @@ class VideoProbeActivity : ComponentActivity() {
         web = this
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.mediaPlaybackRequiresUserGesture = true
+        settings.mediaPlaybackRequiresUserGesture = voicePlaybackId != id
         settings.allowFileAccess = false
         settings.allowContentAccess = false
         webViewClient = object : WebViewClient() {
@@ -174,19 +312,36 @@ class VideoProbeActivity : ComponentActivity() {
                 val text = message.message()
                 if (text.startsWith("SHSH_PLAYER:")) {
                     Log.i("SHSH_PLAYER", text)
-                    // Only diagnostic status, never commands or an exposed JS bridge.
+                    // Fixed player events only; no exposed JS bridge or raw JavaScript commands.
                     post {
                         if (web !== this@apply) return@post
                         val event = text.removePrefix("SHSH_PLAYER:")
                         val errorCode = event.removePrefix("Error=").toIntOrNull()
                         if (event.startsWith("State=")) {
                             playerState = event.removePrefix("State=").toIntOrNull() ?: -1
+                            if (playerState == 1 && voicePlaybackId == id) {
+                                if (!resumed || !allowed || gleoSession?.active != true) {
+                                    stopPlayer("음성 요청 만료 또는 차량 제한으로 재생 중지")
+                                    return@post
+                                }
+                                voicePlaybackId = null
+                                finishGleo(GleoReply("success", "The selected karaoke result is now playing.",
+                                    org.json.JSONArray().put(org.json.JSONObject().put("index", gleoSession?.request?.index)
+                                        .put("playbackStarted", true)).toString(), reason = "playback_started"))
+                            }
                             if (captureRequested && playerState != 1) {
                                 stopPlayer("재생 중단으로 녹음 취소 · 영상을 다시 선택하세요")
                                 return@post
                             }
                         }
+                        if (event == "AutoplayBlocked") {
+                            voicePlaybackId = null
+                            finishGleo(GleoReply.fail("The player blocked voice-initiated playback. Use the visible play button.", reason = "autoplay_blocked"))
+                            status = "음성 재생이 차단됐어요 · 화면의 재생 버튼을 눌러주세요"
+                            return@post
+                        }
                         if (event.startsWith("Error=")) {
+                            finishGleo(GleoReply.fail("The selected video could not be played. Choose another result.", reason = "player_error"))
                             val message = when (errorCode) {
                                 101, 150 -> "이 영상은 앱 내 삽입 재생이 허용되지 않습니다 · 다른 검색 결과를 선택하세요"
                                 100 -> "삭제되었거나 비공개인 영상입니다 · 다른 결과를 선택하세요"
@@ -197,7 +352,7 @@ class VideoProbeActivity : ComponentActivity() {
                             playerError = message
                         } else {
                             status = when (event) {
-                                "Ready" -> "플레이어 준비 완료 · 화면의 재생 버튼을 누르세요"
+                                "Ready" -> if (voicePlaybackId == id) "선택한 곡 재생 시작 대기 중" else "플레이어 준비 완료 · 화면의 재생 버튼을 누르세요"
                                 "State=1" -> "영상 재생 중"
                                 "State=0" -> "영상 재생 종료"
                                 else -> event
@@ -208,13 +363,15 @@ class VideoProbeActivity : ComponentActivity() {
                 return true
             }
         }
+        val voicePlayback = voicePlaybackId == id
         val html = """
             <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body style="margin:0;height:100vh;background:#071014"><div id="player"></div><script>
             function onYouTubeIframeAPIReady(){new YT.Player('player',{
               width:'100%',height:'100%',videoId:'$id',
               playerVars:{playsinline:1,autoplay:0,origin:'https://com.shsh.pleos.playground'},
-              events:{onReady:function(){console.log('SHSH_PLAYER:Ready');},
+              events:{onReady:function(e){console.log('SHSH_PLAYER:Ready');if($voicePlayback){e.target.playVideo();}},
+                onAutoplayBlocked:function(){console.log('SHSH_PLAYER:AutoplayBlocked');},
                 onStateChange:function(e){console.log('SHSH_PLAYER:State='+e.data);},
                 onError:function(e){console.log('SHSH_PLAYER:Error='+e.data);}}
             });}
@@ -226,6 +383,10 @@ class VideoProbeActivity : ComponentActivity() {
     }
 
     private fun stopPlayer(reason: String) {
+        if (voicePlaybackId != null && gleoSession?.active == true) {
+            finishGleo(GleoReply.fail("Playback was interrupted before it started.", reason = "playback_interrupted"))
+        }
+        voicePlaybackId = null
         captureRequested = false
         uploadConsent = false
         consent = false

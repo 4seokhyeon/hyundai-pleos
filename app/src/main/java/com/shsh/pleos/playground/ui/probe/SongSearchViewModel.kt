@@ -8,6 +8,7 @@ import com.shsh.pleos.playground.data.Song
 import com.shsh.pleos.playground.data.SongSearchException
 import com.shsh.pleos.playground.data.SongRepository
 import com.shsh.pleos.playground.data.SttRepository
+import com.shsh.pleos.playground.gleo.GleoReply
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,10 +38,36 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
             finally { mutableState.update { it.copy(busy = false) } }
         }
     }
-    private suspend fun performSearch(query: String) {
+    private suspend fun performSearch(query: String, canPublish: () -> Boolean = { true }): List<Song> {
         val songs = repository.search(query)
+        if (!canPublish()) throw CancellationException("Song search action expired")
         mutableState.update { it.copy(songs = songs, message = if (songs.isEmpty()) "검색 결과 없음 · 곡명·가수를 바꿔주세요" else "YouTube 검색 결과 · 제목과 채널을 확인해 선택하세요") }
+        return songs
     }
+
+    /** Reuses the touch/STT search path; Gleo owns its own speech recognition. */
+    fun searchFromGleo(query: String, canPublish: () -> Boolean, onReply: (GleoReply) -> Unit) {
+        if (mutableState.value.busy) {
+            onReply(GleoReply.fail("Another song search is in progress. Please try again after it finishes.", reason = "search_busy"))
+            return
+        }
+        // Set busy synchronously so a second command cannot launch a concurrent search.
+        mutableState.update { it.copy(query = query, busy = true, listening = false, error = null,
+            songs = emptyList(), message = "Gleo에서 전달받은 곡으로 검색 중") }
+        work = viewModelScope.launch {
+            try {
+                val songs = performSearch(query, canPublish)
+                onReply(GleoReply.results(songs))
+            } catch (error: CancellationException) {
+                onReply(GleoReply.fail("The song search was cancelled before completion.", reason = "search_cancelled"))
+                throw error
+            } catch (error: Exception) {
+                fail(error)
+                onReply(GleoReply.fail("The karaoke search could not be completed. Check the connection and try again.", reason = "search_failed"))
+            } finally { mutableState.update { it.copy(busy = false, listening = false) } }
+        }
+    }
+
     fun voiceSearch() {
         if (mutableState.value.busy) return
         work = viewModelScope.launch {
