@@ -1,0 +1,48 @@
+{
+  "packageName": "com.shsh.pleos.playground",
+  "appDescription": "Noraehaja is a parked-car karaoke app that searches Korean karaoke videos, plays a numbered search result, and evaluates short microphone recordings.",
+  "invokeWord": "노래하자",
+  "version": "1.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "SEARCH_SONG",
+        "description": "Searches karaoke videos by song title or artist and displays matching results for the user to select.",
+        "component": "activity",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The song title, artist name, or both to search for."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "SELECT_SONG",
+        "description": "Selects and plays a numbered item from the current karaoke search results while parked. The index is the one-based number displayed in the results and returned by SEARCH_SONG.",
+        "component": "activity",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "description": "One-based number of the song in the current search results."
+            }
+          },
+          "required": [
+            "index"
+          ]
+        }
+      }
+    }
+  ]
+}
