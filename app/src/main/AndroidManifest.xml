@@ -25,6 +25,19 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PleosSdkPlayground">
+        <activity
+            android:name=".GleoEntryActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="SEARCH_SONG" />
+                <action android:name="com.shsh.pleos.playground.SEARCH_SONG" />
+                <action android:name="SELECT_SONG" />
+                <action android:name="com.shsh.pleos.playground.SELECT_SONG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity android:name=".VideoProbeActivity" android:exported="false" />
         <activity android:name=".PublicDataProbeActivity" android:exported="false" />
         <activity
