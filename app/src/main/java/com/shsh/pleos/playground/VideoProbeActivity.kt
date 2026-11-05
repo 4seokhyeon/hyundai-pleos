@@ -21,18 +21,26 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import kotlin.math.roundToInt
+import com.shsh.pleos.playground.ui.karaoke.WorkspaceOverlay
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shsh.pleos.playground.ui.probe.SongSearchViewModel
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.shsh.pleos.playground.platform.DrivingRestrictionsMonitor
 import com.shsh.pleos.playground.ui.theme.PleosSdkPlaygroundTheme
 
@@ -42,6 +50,7 @@ class VideoProbeActivity : ComponentActivity() {
     private var detail by mutableStateOf("제한 상태 미확인")
     private var loadedId by mutableStateOf<String?>(null)
     private var status by mutableStateOf("곡을 검색해서 선택하세요")
+    private var gleoCommandSummary by mutableStateOf<String?>(null)
     private var selectedSong by mutableStateOf<Song?>(null)
     private var playerError by mutableStateOf<String?>(null)
     private lateinit var searchModel: SongSearchViewModel
@@ -58,6 +67,11 @@ class VideoProbeActivity : ComponentActivity() {
         if (uri != null) recordingModel.export(uri)
     }
     private var web: WebView? = null
+    private lateinit var playerRoot: FrameLayout
+    private lateinit var nativePlayerHost: FrameLayout
+    private lateinit var modalHost: ComposeView
+    private var modalContent by mutableStateOf<WorkspaceOverlay?>(null)
+    private var nativePlayerKey: Pair<String,Int>? = null
     private var monitor: DrivingRestrictionsMonitor? = null
     private var resumed = false
     private var voiceEntryConsumed = false
@@ -65,6 +79,7 @@ class VideoProbeActivity : ComponentActivity() {
     private var pendingGleoQuery: String? = null
     private var pendingSelection: List<Song>? = null
     private var voicePlaybackId: String? = null
+    private var requestedPlaybackId: String? = null
     private var playerGeneration by mutableStateOf(0)
     private var gleoSearchStarted = false
 
@@ -80,7 +95,28 @@ class VideoProbeActivity : ComponentActivity() {
         // can receive LOSS as the embedded player starts and incorrectly destroy it.
         Log.i("SHSH_APP", "Karaoke workspace started; dark design applied")
         Log.i("SHSH_PLAYER", "Audio focus owner=WebView media session; native request disabled")
-        setContent {
+        playerRoot = FrameLayout(this)
+        val workspaceHost = ComposeView(this).apply {
+            id = View.generateViewId()
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        }
+        nativePlayerHost = FrameLayout(this).apply {
+            clipChildren = true
+            clipToPadding = true
+            visibility = View.GONE
+            setBackgroundColor(android.graphics.Color.BLACK)
+        }
+        modalHost = ComposeView(this).apply {
+            id = View.generateViewId()
+            visibility = View.GONE
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        }
+        playerRoot.addView(workspaceHost, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        playerRoot.addView(nativePlayerHost, FrameLayout.LayoutParams(1, 1))
+        playerRoot.addView(modalHost, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        setContentView(playerRoot)
+        modalHost.setContent { PleosSdkPlaygroundTheme { modalContent?.invoke() } }
+        workspaceHost.setContent {
             val search by searchModel.uiState.collectAsStateWithLifecycle()
             val recording by recordingModel.uiState.collectAsStateWithLifecycle()
             LaunchedEffect(allowed) {
@@ -106,6 +142,11 @@ class VideoProbeActivity : ComponentActivity() {
                     allowed = allowed && resumed, mode = recordingMode,
                     hasPlayer = loadedId != null, playerReady = playerState == 1,
                     status = status, search = search, recording = recording,
+                    receivedCommand = gleoCommandSummary, onPlay = ::requestPlayerPlayback,
+                    onOverlayChanged = { content ->
+                        modalContent = content
+                        modalHost.visibility = if(content==null) View.GONE else View.VISIBLE
+                    },
                     selectedSong = selectedSong, playerError = playerError,
                     onMode = { mode ->
                         searchModel.cancel()
@@ -114,8 +155,9 @@ class VideoProbeActivity : ComponentActivity() {
                         recordingMode = mode.takeIf { it.isNotEmpty() }
                         Log.i("SHSH_APP", "Karaoke mode selected; mode=${recordingMode ?: "selection"}")
                     },
-                    onEdit = searchModel::edit, onSearch = searchModel::search,
-                    onVoice = searchModel::voiceSearch, onSearchCancel = searchModel::cancel,
+                    onEdit = { gleoCommandSummary=null; searchModel.edit(it) },
+                    onSearch = { gleoCommandSummary=null; searchModel.search() },
+                    onVoice = { gleoCommandSummary=null; searchModel.voiceSearch() }, onSearchCancel = searchModel::cancel,
                     onSong = { song ->
                         finishGleo(GleoReply.fail("The voice action was replaced by a manual selection.", reason = "manual_selection"))
                         selectSong(song, voicePlayback = false)
@@ -141,9 +183,18 @@ class VideoProbeActivity : ComponentActivity() {
                     onClearErrors = { playerError = null; searchModel.clearError(); recordingModel.clearErrors() },
                     player = {
                         loadedId?.let { id ->
-                            androidx.compose.runtime.key(id, playerGeneration) {
-                                AndroidView(factory = { createPlayer(id) }, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                            val generation = playerGeneration
+                            DisposableEffect(id, generation) {
+                                onDispose {
+                                    if(nativePlayerKey == (id to generation)) removeNativePlayer()
+                                }
                             }
+                            // Compose provides the rectangle; WebView itself is a native sibling.
+                            Box(Modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+                                val position = coordinates.positionInWindow()
+                                placeNativePlayer(id, generation, position.x.roundToInt(), position.y.roundToInt(),
+                                    coordinates.size.width, coordinates.size.height)
+                            })
                         }
                     }
                 )
@@ -160,6 +211,9 @@ class VideoProbeActivity : ComponentActivity() {
 
     private fun acceptGleoIntent(incoming: Intent) {
         val request = GleoSearchContract.takeForwarded(incoming) ?: return
+        // This is the parsed function input, not Gleo's live STT transcript.
+        gleoCommandSummary = if (request.function == GleoSearchContract.ACTION) "곡 검색 · ${request.query ?: "검색어 확인 필요"}"
+            else "검색 결과 재생 · ${request.index?.let { "${it}번" } ?: "번호 확인 필요"}"
         // A Gleo action must not accidentally trigger the app's microphone entry mode.
         voiceEntryConsumed = true
         if (gleoSession?.active == true) {
@@ -255,8 +309,10 @@ class VideoProbeActivity : ComponentActivity() {
         selectedSong = song
         playerGeneration += 1
         voicePlaybackId = song.videoId.takeIf { voicePlayback }
+        requestedPlaybackId = song.videoId
         loadedId = song.videoId
-        status = if (voicePlayback) "선택한 곡 재생 준비 중" else "${song.title} · 공식 플레이어에서 재생을 누르세요"
+        status = "선택한 곡 재생 준비 중"
+        Log.i("SHSH_PLAYER", "Playback selected; source=${if(voicePlayback) "gleo" else "touch"}, playOnReady=true")
     }
 
     private fun finishGleo(reply: GleoReply) {
@@ -296,15 +352,61 @@ class VideoProbeActivity : ComponentActivity() {
         if (!hasFocus && loadedId != null) stopPlayer("창 포커스 상실로 중지")
     }
 
+    private fun placeNativePlayer(id: String, generation: Int, windowX: Int, windowY: Int, width: Int, height: Int) {
+        if(!allowed || !resumed || loadedId!=id || playerGeneration!=generation || width<=0 || height<=0) return
+        val origin=IntArray(2)
+        playerRoot.getLocationInWindow(origin)
+        val left=windowX-origin[0]
+        val top=windowY-origin[1]
+        val current=nativePlayerHost.layoutParams as FrameLayout.LayoutParams
+        if(current.width!=width || current.height!=height || current.leftMargin!=left || current.topMargin!=top) {
+            nativePlayerHost.layoutParams=FrameLayout.LayoutParams(width,height).apply { leftMargin=left;topMargin=top }
+            Log.i("SHSH_PLAYER","Native host bounds; width=$width, height=$height")
+        }
+        val key=id to generation
+        if(nativePlayerKey!=key || web==null) {
+            web?.let { releasePlayerView(it) }
+            nativePlayerHost.removeAllViews()
+            nativePlayerKey=key
+            nativePlayerHost.addView(createPlayer(id),FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT))
+            Log.i("SHSH_PLAYER","Player attached; host=native_sibling, composeInterop=false")
+        }
+        nativePlayerHost.visibility=View.VISIBLE
+    }
+
+    private fun removeNativePlayer() {
+        nativePlayerKey=null
+        if(::nativePlayerHost.isInitialized) {
+            nativePlayerHost.visibility=View.GONE
+            web?.let { releasePlayerView(it) }
+            nativePlayerHost.removeAllViews()
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun createPlayer(id: String): WebView = WebView(this).apply {
+        web?.let { releasePlayerView(it) }
         web = this
+        playerState = -1
+        status = "공식 플레이어 화면 불러오는 중"
+        setBackgroundColor(android.graphics.Color.BLACK)
+        WebView.getCurrentWebViewPackage()?.let { provider ->
+            Log.i("SHSH_PLAYER", "WebView provider; package=${provider.packageName}, version=${provider.versionName}")
+        }
+        addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (right-left != oldRight-oldLeft || bottom-top != oldBottom-oldTop) {
+                Log.i("SHSH_PLAYER", "WebView layout; width=${right-left}, height=${bottom-top}, attached=$isAttachedToWindow, hardware=$isHardwareAccelerated")
+            }
+        }
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.mediaPlaybackRequiresUserGesture = voicePlaybackId != id
+        settings.mediaPlaybackRequiresUserGesture = requestedPlaybackId != id
         settings.allowFileAccess = false
         settings.allowContentAccess = false
         webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, url: String?) {
+                if (web === view) Log.i("SHSH_PLAYER", "Player page finished; width=${view.width}, height=${view.height}")
+            }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = request.isForMainFrame
         }
         webChromeClient = object : WebChromeClient() {
@@ -316,9 +418,12 @@ class VideoProbeActivity : ComponentActivity() {
                     post {
                         if (web !== this@apply) return@post
                         val event = text.removePrefix("SHSH_PLAYER:")
+                        if (event.startsWith("Layout=")) return@post
+                        if (event == "PlayRequested") { status = "영상과 소리 재생 요청 중"; return@post }
                         val errorCode = event.removePrefix("Error=").toIntOrNull()
                         if (event.startsWith("State=")) {
                             playerState = event.removePrefix("State=").toIntOrNull() ?: -1
+                            if (playerState == 1) requestedPlaybackId = null
                             if (playerState == 1 && voicePlaybackId == id) {
                                 if (!resumed || !allowed || gleoSession?.active != true) {
                                     stopPlayer("음성 요청 만료 또는 차량 제한으로 재생 중지")
@@ -335,6 +440,7 @@ class VideoProbeActivity : ComponentActivity() {
                             }
                         }
                         if (event == "AutoplayBlocked") {
+                            requestedPlaybackId = null
                             voicePlaybackId = null
                             finishGleo(GleoReply.fail("The player blocked voice-initiated playback. Use the visible play button.", reason = "autoplay_blocked"))
                             status = "음성 재생이 차단됐어요 · 화면의 재생 버튼을 눌러주세요"
@@ -352,7 +458,7 @@ class VideoProbeActivity : ComponentActivity() {
                             playerError = message
                         } else {
                             status = when (event) {
-                                "Ready" -> if (voicePlaybackId == id) "선택한 곡 재생 시작 대기 중" else "플레이어 준비 완료 · 화면의 재생 버튼을 누르세요"
+                                "Ready" -> if (requestedPlaybackId == id) "선택한 곡 재생 시작 대기 중" else "플레이어 준비 완료 · 화면의 재생 버튼을 누르세요"
                                 "State=1" -> "영상 재생 중"
                                 "State=0" -> "영상 재생 종료"
                                 else -> event
@@ -363,23 +469,30 @@ class VideoProbeActivity : ComponentActivity() {
                 return true
             }
         }
-        val voicePlayback = voicePlaybackId == id
-        val html = """
-            <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-            <body style="margin:0;height:100vh;background:#071014"><div id="player"></div><script>
-            function onYouTubeIframeAPIReady(){new YT.Player('player',{
-              width:'100%',height:'100%',videoId:'$id',
-              playerVars:{playsinline:1,autoplay:0,origin:'https://com.shsh.pleos.playground'},
-              events:{onReady:function(e){console.log('SHSH_PLAYER:Ready');if($voicePlayback){e.target.playVideo();}},
-                onAutoplayBlocked:function(){console.log('SHSH_PLAYER:AutoplayBlocked');},
-                onStateChange:function(e){console.log('SHSH_PLAYER:State='+e.data);},
-                onError:function(e){console.log('SHSH_PLAYER:Error='+e.data);}}
-            });}
-            </script><script src="https://www.youtube.com/iframe_api"></script></body></html>
-        """.trimIndent()
+        val playOnReady = requestedPlaybackId == id
+        val html = com.shsh.pleos.playground.platform.YouTubePlayerPage.html(id, playOnReady)
         // App identifier as WebView base URL / Referer; no audio URL extraction.
         loadDataWithBaseURL("https://com.shsh.pleos.playground/", html, "text/html", "UTF-8", null)
         Log.i("SHSH_PLAYER", "Official IFrame player load requested")
+    }
+
+    private fun requestPlayerPlayback() {
+        if (!allowed || !resumed || recordingModel.uiState.value.busy) return
+        val id = loadedId ?: return
+        requestedPlaybackId = id
+        status = "영상과 소리 재생 요청 중"
+        web?.evaluateJavascript("if(window.requestPlayback){window.requestPlayback();}", null)
+        Log.i("SHSH_PLAYER", "Explicit play button pressed; webPresent=${web != null}")
+    }
+
+    private fun releasePlayerView(view: WebView) {
+        if (web !== view) return
+        web = null
+        (view.parent as? ViewGroup)?.removeView(view)
+        playerState = -1
+        status = "플레이어 화면이 종료됐어요"
+        view.stopLoading(); view.loadUrl("about:blank"); view.onPause(); view.destroy()
+        Log.i("SHSH_PLAYER", "Native player WebView released")
     }
 
     private fun stopPlayer(reason: String) {
@@ -387,13 +500,19 @@ class VideoProbeActivity : ComponentActivity() {
             finishGleo(GleoReply.fail("Playback was interrupted before it started.", reason = "playback_interrupted"))
         }
         voicePlaybackId = null
+        requestedPlaybackId = null
         captureRequested = false
         uploadConsent = false
         consent = false
         playerState = -1
         if (::recordingModel.isInitialized) recordingModel.leave()
         val previous = web
-        web = null; loadedId = null
+        web = null; loadedId = null; nativePlayerKey=null
+        if(::nativePlayerHost.isInitialized) {
+            nativePlayerHost.visibility=View.GONE
+            previous?.let { (it.parent as? ViewGroup)?.removeView(it) }
+            nativePlayerHost.removeAllViews()
+        }
         previous?.apply { stopLoading(); loadUrl("about:blank"); onPause(); destroy() }
         status = reason
         Log.i("SHSH_PLAYER", "Player stopped; reason=$reason")
