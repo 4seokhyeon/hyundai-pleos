@@ -35,6 +35,8 @@ import com.shsh.pleos.playground.ui.probe.RecordingProbeUiState
 import com.shsh.pleos.playground.ui.probe.SongSearchUiState
 import com.shsh.pleos.playground.ui.theme.PleosColors as C
 
+typealias WorkspaceOverlay = @Composable () -> Unit
+
 @Composable
 private fun MicButton(enabled: Boolean,onClick: () -> Unit) {
     Box(Modifier.size(248.dp),contentAlignment=Alignment.Center) {
@@ -108,7 +110,7 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
             else -> HomeLayout(onVoice,openSos,onVocal) {
                 Surface(onClick=onStart,color=C.Card,shape=RoundedCornerShape(20.dp),border=BorderStroke(1.dp,C.Border),modifier=Modifier.fillMaxWidth().heightIn(min=96.dp)) {
                     Row(Modifier.padding(24.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                        Glyph("search",C.Muted,Modifier.size(32.dp)); Text("곡명 또는 가수 검색",Modifier.weight(1f),fontSize=28.sp,lineHeight=40.sp,fontWeight=FontWeight.SemiBold)
+                        Glyph("search",C.Muted,Modifier.size(32.dp)); Text("곡명·가수 검색",Modifier.weight(1f),fontSize=28.sp,lineHeight=40.sp,fontWeight=FontWeight.SemiBold)
                         Text("터치해서 입력",color=C.Muted,fontSize=22.sp,lineHeight=32.sp)
                     }
                 }
@@ -119,7 +121,7 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
 
 @Composable private fun SearchField(search: SongSearchUiState,enabled: Boolean,onEdit: (String)->Unit,onSearch: ()->Unit) {
     Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-        OutlinedTextField(search.query,onEdit,Modifier.weight(1f).heightIn(min=88.dp),enabled=enabled,textStyle=MaterialTheme.typography.bodyLarge,singleLine=true,placeholder={Text("곡명 또는 가수 검색")},
+        OutlinedTextField(search.query,onEdit,Modifier.weight(1f).heightIn(min=88.dp),enabled=enabled,textStyle=MaterialTheme.typography.bodyLarge,singleLine=true,placeholder={Text("웅키 채널에서 곡명·가수 검색")},
             leadingIcon={Glyph("search",C.Muted)},shape=RoundedCornerShape(20.dp),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),keyboardActions=KeyboardActions(onSearch={if(enabled) onSearch()}))
         Action("검색",enabled=enabled,icon="search",onClick=onSearch)
     }
@@ -138,13 +140,13 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
                 Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                     row.forEachIndexed { index,song ->
                         Surface(Modifier.weight(1f),color=C.Card,shape=RoundedCornerShape(22.dp),border=BorderStroke(1.dp,C.Border)) {
-                            Row(Modifier.heightIn(min=252.dp).padding(16.dp),horizontalArrangement=Arrangement.spacedBy(20.dp)) {
-                                Surface(Modifier.width(90.dp).heightIn(min=208.dp),color=C.Raised,shape=RoundedCornerShape(16.dp)) {
-                                    Column(Modifier.padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) { Glyph("music",C.Mint,Modifier.size(38.dp)); Spacer(Modifier.height(18.dp)); Text("${rowIndex*columns+index+1}번",color=C.Mint,fontSize=28.sp,lineHeight=38.sp) }
+                            Row(Modifier.heightIn(min=216.dp).padding(20.dp),horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Surface(Modifier.width(80.dp).heightIn(min=148.dp),color=C.Raised,shape=RoundedCornerShape(16.dp)) {
+                                    Column(Modifier.padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) { Glyph("music",C.Mint,Modifier.size(38.dp)); Spacer(Modifier.height(12.dp)); Text("${rowIndex*columns+index+1}번",color=C.Mint,fontSize=28.sp,lineHeight=38.sp) }
                                 }
-                                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                                    Text(song.title,style=MaterialTheme.typography.titleMedium,maxLines=3,overflow=TextOverflow.Ellipsis)
-                                    Text(song.channelTitle,color=C.Muted,fontSize=22.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
+                                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(18.dp)) {
+                                    Text(song.title,style=MaterialTheme.typography.titleMedium,minLines=2,maxLines=3,overflow=TextOverflow.Ellipsis)
+//                                    Text(song.channelTitle,color=C.Muted,fontSize=22.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
                                     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                                         Action("예약",secondary=true,enabled=false,icon="queue",modifier=Modifier.weight(.85f),onClick={})
                                         Action("바로 재생",enabled=idle,icon="play",modifier=Modifier.weight(1f),onClick={onSong(song)})
@@ -156,44 +158,73 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
                     if(row.size<columns) Spacer(Modifier.weight(1f))
                 }
             }
-            Text("Gleo에 “노래하자에서 3번 재생해줘”라고 말해 보세요. YouTube 제공 · 예약 기능은 준비 중이에요.",color=C.Muted,style=MaterialTheme.typography.bodySmall)
+            Text("Gleo에 “노래하자에서 3번 재생해줘”라고 말해 보세요. 웅키 채널 · YouTube 제공 · 예약 기능은 준비 중이에요.",color=C.Muted,style=MaterialTheme.typography.bodySmall)
         }
     }
 }
 
 @Composable private fun PlayerLayout(song: Song?,status: String,recording: RecordingProbeUiState,playerReady: Boolean,idle: Boolean,
-    onRecord: ()->Unit,onFinish: ()->Unit,onClose: ()->Unit,onSos: ()->Unit,player: @Composable ()->Unit) {
+    onRecord: ()->Unit,onFinish: ()->Unit,onClose: ()->Unit,onSos: ()->Unit,onPlay: ()->Unit,player: @Composable ()->Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide=maxWidth>=960.dp
-        val video: @Composable ()->Unit = {
-            BoxWithConstraints(Modifier.fillMaxSize().padding(24.dp)) {
+        val recordingFocus=recording.busy
+        val compact=maxWidth<800.dp
+        val barHeight=if(compact) 176.dp else 112.dp
+        val videoWidth=if(recordingFocus || !wide) maxWidth else maxWidth*(1.63f/2.5f)
+        val videoHeight=when {
+            recordingFocus -> (maxHeight-barHeight).coerceAtLeast(0.dp)
+            wide -> maxHeight
+            else -> minOf(360.dp,maxHeight*.48f)
+        }
+        // Keep this call site fixed. Resizing for recording must not replace the native WebView.
+        Box(Modifier.width(videoWidth).height(videoHeight).align(Alignment.TopStart)) {
+            BoxWithConstraints(Modifier.fillMaxSize().padding(if(recordingFocus) 0.dp else 24.dp)) {
                 val width=minOf(maxWidth,maxHeight*16f/9f)
-                Surface(Modifier.width(width).aspectRatio(16f/9f).align(Alignment.Center),color=C.Background,border=BorderStroke(1.dp,C.Border),shape=RoundedCornerShape(20.dp)) { player() }
+                val frame=if(recordingFocus) Modifier.fillMaxSize() else Modifier.width(width).aspectRatio(16f/9f).align(Alignment.Center)
+                // Keep the embedded WebView out of a rounded Surface's clipping layer.
+                // Only this container changes; the existing player call site stays mounted.
+                Box(frame.background(androidx.compose.ui.graphics.Color.Black)) { player() }
             }
         }
-        val panel: @Composable ()->Unit = {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+        if(!recordingFocus) {
+            val panelModifier=if(wide) Modifier.width(maxWidth-videoWidth).fillMaxHeight().align(Alignment.TopEnd)
+                else Modifier.fillMaxWidth().height(maxHeight-videoHeight).align(Alignment.BottomStart)
+            Column(panelModifier.background(C.Panel).verticalScroll(rememberScrollState()).padding(28.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
                 Chip("공식 YouTube 플레이어",C.Muted)
                 Notice("플랫폼 허용 상태에서 재생해요","주행 제한이 적용되면 영상과 소리를 멈춰요.")
                 Eyebrow("NOW PLAYING")
                 Text(song?.title ?: "선택한 노래",style=MaterialTheme.typography.headlineSmall,maxLines=3,overflow=TextOverflow.Ellipsis)
-                Text(song?.channelTitle.orEmpty(),color=C.Muted,style=MaterialTheme.typography.bodyMedium)
+//                Text(song?.channelTitle.orEmpty(),color=C.Muted,style=MaterialTheme.typography.bodyMedium)
                 Text(status,color=C.Muted,style=MaterialTheme.typography.bodySmall)
-                if(recording.busy) {
-                    Chip("녹음 중 · 최대 15초",C.Recording,"record"); Waveform(C.Recording)
-                    Action("녹음 종료 및 저장",secondary=true,enabled=recording.recording,onClick=onFinish)
-                } else {
-                    Text("반주와 주변 소리도 녹음에 들어갈 수 있어요.",color=C.Muted,style=MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.weight(1f))
-                    Action("녹음 시작",recording=true,icon="record",enabled=idle&&playerReady,modifier=Modifier.fillMaxWidth(),onClick=onRecord)
-                    if(!playerReady) Text("공식 플레이어의 재생 버튼을 눌러주세요.",color=C.Amber,style=MaterialTheme.typography.bodySmall)
-                    Action("화장실 SOS",amber=true,icon="toilet",enabled=idle,onClick=onSos)
+                Text("반주와 주변 소리도 녹음에 들어갈 수 있어요.",color=C.Muted,style=MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.weight(1f))
+                Action("녹음 시작",recording=true,icon="record",enabled=idle&&playerReady,modifier=Modifier.fillMaxWidth(),onClick=onRecord)
+                if(!playerReady) {
+                    Action("영상·소리 재생",secondary=true,enabled=idle,icon="play",modifier=Modifier.fillMaxWidth(),onClick=onPlay)
+                    Text("재생이 시작되면 녹음할 수 있어요.",color=C.Amber,style=MaterialTheme.typography.bodySmall)
                 }
+                Action("화장실 SOS",amber=true,icon="toilet",enabled=idle,onClick=onSos)
                 Action("재생 중지 · 곡 목록으로",secondary=true,modifier=Modifier.fillMaxWidth(),onClick=onClose)
             }
         }
-        if(wide) Row(Modifier.fillMaxSize()) { Box(Modifier.weight(1.63f)) { video() }; Box(Modifier.weight(.87f).background(C.Panel)) { panel() } }
-        else Column { Box(Modifier.fillMaxWidth().height(360.dp)) { video() }; Box(Modifier.weight(1f)) { panel() } }
+        if(recordingFocus) {
+            Surface(Modifier.fillMaxWidth().height(barHeight).align(Alignment.BottomStart),color=C.Panel) {
+                val label: @Composable ()->Unit = {
+                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+                        Box(Modifier.size(16.dp).background(C.Recording,CircleShape))
+                        Text(if(recording.recording) "녹음 중" else "녹음 준비 중",color=C.Recording,fontSize=32.sp,lineHeight=42.sp,fontWeight=FontWeight.Bold)
+                        Text("최대 15초",color=C.Muted,fontSize=22.sp)
+                    }
+                }
+                if(compact) Column(Modifier.fillMaxSize().padding(horizontal=24.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    label()
+                    Action("녹음 종료 및 저장",secondary=true,enabled=recording.recording,modifier=Modifier.fillMaxWidth(),onClick=onFinish)
+                } else Row(Modifier.fillMaxSize().padding(horizontal=32.dp,vertical=16.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+                    label()
+                    Action("녹음 종료 및 저장",secondary=true,enabled=recording.recording,onClick=onFinish)
+                }
+            }
+        }
     }
 }
 
@@ -247,7 +278,8 @@ fun KaraokeWorkspace(allowed: Boolean,mode: String?,hasPlayer: Boolean,playerRea
     onMode: (String)->Unit,onEdit: (String)->Unit,onSearch: ()->Unit,onVoice: ()->Unit,onSearchCancel: ()->Unit,onSong: (Song)->Unit,
     onConsent: (Boolean)->Unit,onUploadConsent: (Boolean)->Unit,onRecord: ()->Unit,onFinish: ()->Unit,onListen: ()->Unit,onStopListen: ()->Unit,onDelete: ()->Unit,
     onRecordConsentOpen: ()->Unit,onScore: ()->Unit,onCancelScore: ()->Unit,onClosePlayer: ()->Unit,onHome: ()->Unit,onClearErrors: ()->Unit,
-    player: @Composable ()->Unit) {
+    receivedCommand: String? = null, onPlay: ()->Unit = {},
+    onOverlayChanged: (WorkspaceOverlay?) -> Unit, player: @Composable ()->Unit) {
     val context=LocalContext.current
     val idle=!recording.busy&&!recording.playing&&!recording.exporting&&!recording.scoring&&!search.busy
     val condition=if(recording.inputKind=="vocal_only") "무반주" else "반주 포함"
@@ -262,9 +294,20 @@ fun KaraokeWorkspace(allowed: Boolean,mode: String?,hasPlayer: Boolean,playerRea
     val requestRecord: ()->Unit = { onRecordConsentOpen();recordDialog=true }
     val openSos: ()->Unit = { context.startActivity(Intent(context,PublicDataProbeActivity::class.java)) }
     val failure=playerError ?: search.error ?: recording.scoreError ?: recording.error
+    val recordingFocus=allowed && hasPlayer && recording.busy && failure==null && !guide
     BackHandler(enabled=recordDialog||uploadDialog||resetDialog||guide) { recordDialog=false;uploadDialog=false;resetDialog=false;guide=false }
     val title=when { guide->"디자인 시스템";!allowed->"주행 제한";failure!=null->"오류 상태";recording.scoring->if(recording.analysisStarted) "채점 · 분석 중" else "채점 · 업로드 중";recording.score!=null->"채점 · 결과";hasPlayer->"노래방 재생";search.listening->"음성 검색 · 듣는 중";search.busy->"노래 검색 중";recording.busy->"노래 녹음";recording.hasFile->"녹음 확인";search.songs.isNotEmpty()->"음성 검색 · 결과";else->"노래 검색" }
-    DesignShell(title,allowed,onHome=onHome,onData={context.startActivity(Intent(context,PublicDataProbeActivity::class.java).putExtra("open_data",true))},onGuide={if(idle) { if(hasPlayer) onClosePlayer(); guide=true }}) {
+    val overlay: WorkspaceOverlay? = if(allowed && (recordDialog || uploadDialog || resetDialog)) ({
+        if(recordDialog&&allowed) ConsentOverlay("마이크 녹음 동의","RECORDING CONSENT","최대 15초 동안 마이크로 내 노래를 녹음해요. 반주와 주변 소리가 섞일 수 있어요. 녹음 후 직접 확인하고, 별도로 전송을 선택할 수 있어요.","동의하고 녹음 시작",true,
+            onDismiss={recordDialog=false;onConsent(false)},onConfirm={recordDialog=false;onConsent(true);onRecord()})
+        if(uploadDialog&&allowed) ConsentOverlay("녹음 파일 전송 동의","RECORDING UPLOAD","AI 재미 점수 평가를 위해 이 녹음을 채점 서버로 보냅니다. 서버는 처리 후 임시 녹음 파일을 정리해요.","동의하고 전송",
+            onDismiss={uploadDialog=false;onUploadConsent(false)},onConfirm={uploadDialog=false;onUploadConsent(true);onScore()})
+        if(resetDialog&&allowed) ConsentOverlay("곡 검색으로 돌아갈까요?","BACK TO SONGS","현재 녹음과 평가 결과는 삭제돼요.","곡 검색으로",
+            onDismiss={resetDialog=false},onConfirm={resetDialog=false;onMode("mixed")})
+    }) else null
+    SideEffect { onOverlayChanged(overlay) }
+    DisposableEffect(Unit) { onDispose { onOverlayChanged(null) } }
+    DesignShell(title,allowed,immersiveContent=recordingFocus,receivedCommand=receivedCommand,speechTranscript=search.speechTranscript,speechListening=search.listening,onHome=onHome,onData={context.startActivity(Intent(context,PublicDataProbeActivity::class.java).putExtra("open_data",true))},onGuide={if(idle) { if(hasPlayer) onClosePlayer(); guide=true }}) {
         when {
             !allowed -> RestrictionScreen(onHome)
             guide -> DesignSystem { guide=false }
@@ -275,7 +318,7 @@ fun KaraokeWorkspace(allowed: Boolean,mode: String?,hasPlayer: Boolean,playerRea
                 Text(if(recording.analysisStarted) "완료되면 결과를 보여드릴게요." else "전송이 끝나면 분석을 시작해요.",color=C.Muted,style=MaterialTheme.typography.bodySmall); Spacer(Modifier.height(18.dp)); Action("취소",secondary=true,icon="close",onClick=onCancelScore)
             }
             recording.score!=null -> ScoreScreen(recording.score,condition,onList={resetDialog=true},onAgain={onDelete(); if(selectedSong!=null && mode!="vocal_only") onSong(selectedSong)})
-            hasPlayer -> PlayerLayout(selectedSong,status,recording,playerReady,idle,requestRecord,onFinish,onClosePlayer,openSos,player)
+            hasPlayer -> PlayerLayout(selectedSong,status,recording,playerReady,idle,requestRecord,onFinish,onClosePlayer,openSos,onPlay,player)
             search.listening -> CenterState("듣는 중","듣고 있어요","곡명이나 가수를 편하게 말해 주세요.","mic",busy=true) { Action("취소",secondary=true,icon="close",onClick=onSearchCancel) }
             search.busy -> CenterState("SONG SEARCH","노래를 찾고 있어요","검색 결과를 가져오고 있어요.","search",busy=true) { Action("취소",secondary=true,icon="close",onClick=onSearchCancel) }
             recording.busy -> CenterState("RECORDING","목소리를 담고 있어요","최대 15초 동안 녹음해요. 주변 소리도 함께 들어갈 수 있어요.","record",C.Recording,busy=true) { Action("녹음 종료 및 저장",secondary=true,enabled=recording.recording,onClick=onFinish) }
@@ -294,11 +337,6 @@ fun KaraokeWorkspace(allowed: Boolean,mode: String?,hasPlayer: Boolean,playerRea
                 Text(search.message,color=C.Muted,style=MaterialTheme.typography.bodySmall)
             }
         }
-        if(recordDialog&&allowed) ConsentOverlay("마이크 녹음 동의","RECORDING CONSENT","최대 15초 동안 마이크로 내 노래를 녹음해요. 반주와 주변 소리가 섞일 수 있어요. 녹음 후 직접 확인하고, 별도로 전송을 선택할 수 있어요.","동의하고 녹음 시작",true,
-            onDismiss={recordDialog=false;onConsent(false)},onConfirm={recordDialog=false;onConsent(true);onRecord()})
-        if(uploadDialog&&allowed) ConsentOverlay("녹음 파일 전송 동의","RECORDING UPLOAD","AI 재미 점수 평가를 위해 이 녹음을 채점 서버로 보냅니다. 서버는 처리 후 임시 녹음 파일을 정리해요.","동의하고 전송",
-            onDismiss={uploadDialog=false;onUploadConsent(false)},onConfirm={uploadDialog=false;onUploadConsent(true);onScore()})
-        if(resetDialog&&allowed) ConsentOverlay("곡 검색으로 돌아갈까요?","BACK TO SONGS","현재 녹음과 평가 결과는 삭제돼요.","곡 검색으로",
-            onDismiss={resetDialog=false},onConfirm={resetDialog=false;onMode("mixed")})
+
     }
 }

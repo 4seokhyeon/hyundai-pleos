@@ -126,7 +126,7 @@ fun DesignShell(title: String, allowed: Boolean? = null, onHome: (() -> Unit)? =
                             horizontalArrangement=Arrangement.spacedBy(14.dp),verticalAlignment=Alignment.CenterVertically) {
                             Surface(color=C.Mint,shape=RoundedCornerShape(15.dp)) { Box(Modifier.size(48.dp),contentAlignment=Alignment.Center) { Glyph("music",C.Background) } }
                             if(!compact) Text(stringResource(R.string.app_name),fontSize=30.sp,fontWeight=FontWeight.ExtraBold)
-                            if(wide) { Box(Modifier.width(1.dp).height(24.dp).background(C.Border)); Text("카라오케 & SOS",color=C.Muted,fontSize=22.sp) }
+                            if(wide) { Box(Modifier.width(1.dp).height(24.dp).background(C.Border)); Text("노래 & SOS",color=C.Muted,fontSize=22.sp) }
                             Text(title,Modifier.weight(1f).padding(horizontal=12.dp),color=C.Text,fontSize=24.sp,lineHeight=34.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
                             Chip(if(allowed==true) "이용 가능" else if(allowed==false) (if(compact) "제한 확인" else "이용 제한 · 확인 중") else "상태 확인",if(allowed==true) C.Green else C.Amber,"car")
                             Box {
