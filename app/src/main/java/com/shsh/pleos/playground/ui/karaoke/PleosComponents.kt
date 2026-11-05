@@ -106,6 +106,8 @@ fun Action(label: String, enabled: Boolean = true, secondary: Boolean = false, r
 @Composable
 fun DesignShell(title: String, allowed: Boolean? = null, onHome: (() -> Unit)? = null,
     onDiagnostics: (() -> Unit)? = null, onData: (() -> Unit)? = null, onGuide: (() -> Unit)? = null,
+    receivedCommand: String? = null, speechTranscript: String? = null, speechListening: Boolean = false,
+    immersiveContent: Boolean = false,
     content: @Composable BoxScope.() -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(),color=C.Background) {
@@ -116,29 +118,44 @@ fun DesignShell(title: String, allowed: Boolean? = null, onHome: (() -> Unit)? =
                 var y=0f; while(y<size.height) { drawLine(C.Text.copy(alpha=.012f),Offset(0f,y),Offset(size.width,y)); y+=gap }
             }
             Column(Modifier.fillMaxSize()) {
-                BoxWithConstraints(Modifier.fillMaxWidth().background(C.Background)) {
-                    val wide=maxWidth>=1360.dp
-                    val compact=maxWidth<800.dp
-                    Row(Modifier.fillMaxWidth().heightIn(min=112.dp).padding(horizontal=if(wide) 40.dp else 24.dp,vertical=14.dp),
-                        horizontalArrangement=Arrangement.spacedBy(14.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Surface(color=C.Mint,shape=RoundedCornerShape(15.dp)) { Box(Modifier.size(48.dp),contentAlignment=Alignment.Center) { Glyph("music",C.Background) } }
-                        if(!compact) Text(stringResource(R.string.app_name),fontSize=30.sp,fontWeight=FontWeight.ExtraBold)
-                        if(wide) { Box(Modifier.width(1.dp).height(24.dp).background(C.Border)); Text("카라오케 & SOS",color=C.Muted,fontSize=22.sp) }
-                        Text(title,Modifier.weight(1f).padding(horizontal=12.dp),color=C.Text,fontSize=24.sp,lineHeight=34.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
-                        Chip(if(allowed==true) "이용 가능" else if(allowed==false) (if(compact) "제한 확인" else "이용 제한 · 확인 중") else "상태 확인",if(allowed==true) C.Green else C.Amber,"car")
-                        Box {
-                            IconButton(onClick={menu=true},modifier=Modifier.size(72.dp).background(C.Card,RoundedCornerShape(18.dp)).semantics { contentDescription="화면 메뉴 열기" }) { Glyph("menu",C.Text,Modifier.size(32.dp)) }
-                            DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
-                                if(onHome!=null) DropdownMenuItem(text={Text("홈으로")},onClick={menu=false;onHome()})
-                                if(onData!=null) DropdownMenuItem(text={Text("시설 데이터 관리")},onClick={menu=false;onData()})
-                                if(onGuide!=null) DropdownMenuItem(text={Text("디자인 시스템")},onClick={menu=false;onGuide()})
-                                if(onDiagnostics!=null) DropdownMenuItem(text={Text("개발용 SDK 검증")},onClick={menu=false;onDiagnostics()})
-                                DropdownMenuItem(text={Text("닫기")},onClick={menu=false})
+                if (!immersiveContent) {
+                    BoxWithConstraints(Modifier.fillMaxWidth().background(C.Background)) {
+                        val wide=maxWidth>=1360.dp
+                        val compact=maxWidth<800.dp
+                        Row(Modifier.fillMaxWidth().heightIn(min=112.dp).padding(horizontal=if(wide) 40.dp else 24.dp,vertical=14.dp),
+                            horizontalArrangement=Arrangement.spacedBy(14.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Surface(color=C.Mint,shape=RoundedCornerShape(15.dp)) { Box(Modifier.size(48.dp),contentAlignment=Alignment.Center) { Glyph("music",C.Background) } }
+                            if(!compact) Text(stringResource(R.string.app_name),fontSize=30.sp,fontWeight=FontWeight.ExtraBold)
+                            if(wide) { Box(Modifier.width(1.dp).height(24.dp).background(C.Border)); Text("카라오케 & SOS",color=C.Muted,fontSize=22.sp) }
+                            Text(title,Modifier.weight(1f).padding(horizontal=12.dp),color=C.Text,fontSize=24.sp,lineHeight=34.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
+                            Chip(if(allowed==true) "이용 가능" else if(allowed==false) (if(compact) "제한 확인" else "이용 제한 · 확인 중") else "상태 확인",if(allowed==true) C.Green else C.Amber,"car")
+                            Box {
+                                IconButton(onClick={menu=true},modifier=Modifier.size(72.dp).background(C.Card,RoundedCornerShape(18.dp)).semantics { contentDescription="화면 메뉴 열기" }) { Glyph("menu",C.Text,Modifier.size(32.dp)) }
+                                DropdownMenu(expanded=menu,onDismissRequest={menu=false}) {
+                                    if(onHome!=null) DropdownMenuItem(text={Text("홈으로")},onClick={menu=false;onHome()})
+                                    if(onData!=null) DropdownMenuItem(text={Text("시설 데이터 관리")},onClick={menu=false;onData()})
+                                    if(onGuide!=null) DropdownMenuItem(text={Text("디자인 시스템")},onClick={menu=false;onGuide()})
+                                    if(onDiagnostics!=null) DropdownMenuItem(text={Text("개발용 SDK 검증")},onClick={menu=false;onDiagnostics()})
+                                    DropdownMenuItem(text={Text("닫기")},onClick={menu=false})
+                                }
                             }
                         }
                     }
+                    HorizontalDivider(color=C.Border)
                 }
-                HorizontalDivider(color=C.Border)
+                if (!immersiveContent && allowed == true && (speechListening || speechTranscript != null || receivedCommand != null)) {
+                    val appSpeech = receivedCommand == null && (speechListening || speechTranscript != null)
+                    val caption = if (appSpeech) speechTranscript?.takeIf { it.isNotBlank() }
+                        ?: if (speechListening) "말씀해 주세요…" else "인식된 말이 없어요"
+                        else receivedCommand.orEmpty()
+                    Column(Modifier.fillMaxWidth().background(C.Card).padding(horizontal=32.dp,vertical=16.dp),
+                        verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text(if (appSpeech) (if (speechListening) "듣고 있어요" else "인식한 말") else "Gleo가 전달한 내용",
+                            color=if(appSpeech && speechListening) C.Mint else C.Muted,fontSize=20.sp,lineHeight=28.sp)
+                        Text(caption,color=C.Text,fontSize=40.sp,lineHeight=54.sp,fontWeight=FontWeight.SemiBold,
+                            minLines=2,maxLines=2,overflow=TextOverflow.Ellipsis)
+                    }
+                }
                 Box(Modifier.weight(1f).fillMaxWidth(),content=content)
             }
         }
