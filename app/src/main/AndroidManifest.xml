@@ -9,6 +9,7 @@
     <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
 
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
 
     <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
 
@@ -33,6 +34,8 @@
             <intent-filter>
                 <action android:name="SEARCH_SONG" />
                 <action android:name="com.shsh.pleos.playground.SEARCH_SONG" />
+                <action android:name="RESTROOM_SOS" />
+                <action android:name="com.shsh.pleos.playground.RESTROOM_SOS" />
                 <action android:name="SELECT_SONG" />
                 <action android:name="com.shsh.pleos.playground.SELECT_SONG" />
                 <category android:name="android.intent.category.DEFAULT" />
