@@ -11,9 +11,34 @@ import com.shsh.pleos.playground.gleo.sendGleoReply
 
 /** Exported search/numbered playback boundary. No recording, STT, or arbitrary routing. */
 class GleoEntryActivity : ComponentActivity() {
+    private fun handleSos() {
+        val contract = com.shsh.pleos.playground.gleo.GleoSosContract
+        val diagnostic = GleoSearchContract.diagnostic(intent)
+        if (!diagnostic) GleoDiagnostics.externalEntry(true)
+        Log.i("SHSH_GLEO", "Entry opened; action=RESTROOM_SOS, diagnostic=$diagnostic; values omitted")
+        val request = try { contract.readPublic(intent) }
+        catch (_: Exception) {
+            sendGleoReply(this, contract.reply("fail", "Supply a valid SOS operation and candidate number.", "invalid_parameters"), diagnostic)
+            return
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            sendGleoReply(this, contract.reply("fail", "The SOS screen requires Android 10 or later.", "unsupported_android"), diagnostic)
+            return
+        }
+        try { startActivity(contract.forward(this, request)) }
+        catch (error: Exception) {
+            Log.w("SHSH_GLEO", "SOS workspace launch failed; type=${error.javaClass.simpleName}; values omitted")
+            sendGleoReply(this, contract.reply("fail", "The SOS screen could not be opened.", "workspace_launch_failed"), diagnostic)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
+            if (com.shsh.pleos.playground.gleo.GleoSosContract.matches(intent.action)) {
+                handleSos()
+                return
+            }
             val function = GleoSearchContract.functionName(intent.action) ?: GleoSearchContract.ACTION
             val diagnostic = GleoSearchContract.diagnostic(intent)
             if (!diagnostic) GleoDiagnostics.externalEntry(GleoSearchContract.matchesAction(intent.action))

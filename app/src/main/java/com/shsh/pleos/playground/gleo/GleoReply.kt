@@ -24,10 +24,12 @@ data class GleoReply(val status: String, val message: String, val data: String? 
             val data = JSONArray().put(JSONObject().put("resultCount", songs.size).put("playbackStarted", false))
             songs.take(5).forEachIndexed { index, song ->
                 data.put(JSONObject().put("index", index + 1).put("videoId", song.videoId)
-                    .put("title", song.title.take(300)).put("channelTitle", song.channelTitle.take(120)))
+                    .put("title", song.title.take(300)))
             }
-            return GleoReply(if (songs.isEmpty()) "success" else "asking", if (songs.isEmpty()) "The search completed, but no matching karaoke videos were found."
-                else "The karaoke search completed. Select a result number to play from the displayed results. Playback has not started.", data.toString(), reason = if (songs.isEmpty()) "no_matches" else "search_completed")
+            // A completed search is terminal. Selection is a separate SELECT_SONG request,
+            // so a later song query is not kept inside an outstanding selection question.
+            return GleoReply("success", if (songs.isEmpty()) "The search completed, but no matching videos were found."
+                else "The search completed. ${songs.size} results are displayed. Playback has not started.", data.toString(), reason = if (songs.isEmpty()) "no_matches" else "search_completed")
         }
     }
 }
