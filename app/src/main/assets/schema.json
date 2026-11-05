@@ -1,6 +1,6 @@
 {
   "packageName": "com.shsh.pleos.playground",
-  "appDescription": "Noraehaja is a parked-car karaoke app that searches Korean karaoke videos, plays a numbered search result, and evaluates short microphone recordings.",
+  "appDescription": "Noraehaja searches and plays Korean karaoke videos while parked, evaluates short recordings, and finds nearby restrooms with parking information and confirmed navigation handoff.",
   "invokeWord": "노래하자",
   "version": "1.0",
   "actionCalls": [
@@ -8,14 +8,14 @@
       "type": "function",
       "function": {
         "name": "SEARCH_SONG",
-        "description": "Searches karaoke videos by song title or artist and displays matching results for the user to select.",
+        "description": "Runs a new video search using the song title or artist in the current request, replaces the displayed song results, and returns numbered matches.",
         "component": "activity",
         "parameters": {
           "type": "object",
           "properties": {
             "query": {
               "type": "string",
-              "description": "The song title, artist name, or both to search for."
+              "description": "The song title, artist name, or both supplied in the current search request."
             }
           },
           "required": [
@@ -28,18 +28,64 @@
       "type": "function",
       "function": {
         "name": "SELECT_SONG",
-        "description": "Selects and plays a numbered item from the current karaoke search results while parked. The index is the one-based number displayed in the results and returned by SEARCH_SONG.",
+        "description": "Plays a song from the latest displayed song search results using the result number explicitly selected in the current user request, while parked.",
         "component": "activity",
         "parameters": {
           "type": "object",
           "properties": {
             "index": {
               "type": "integer",
-              "description": "One-based number of the song in the current search results."
+              "description": "One-based song result number explicitly selected in the current user request."
             }
           },
           "required": [
             "index"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "RESTROOM_SOS",
+        "description": "Finds nearby restrooms, reads current restroom candidates, selects a numbered candidate, or requests navigation to a restroom or its linked parking lot after confirmation. Uses current app results; live opening and parking vacancy are unverified.",
+        "component": "activity",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "FIND",
+                "READ",
+                "SELECT",
+                "NAVIGATE"
+              ],
+              "description": "FIND refreshes nearby restroom results. READ returns the current results. SELECT opens a candidate. NAVIGATE prepares a destination and requires confirmation before sending it."
+            },
+            "index": {
+              "type": "integer",
+              "description": "One-based candidate number from the current restroom results. Required for selection unless a candidate is already selected."
+            },
+            "target": {
+              "type": "string",
+              "enum": [
+                "RESTROOM",
+                "PARKING"
+              ],
+              "description": "Destination kind. PARKING uses the parking lot linked to the candidate, if available. RESTROOM uses the restroom itself."
+            },
+            "confirmed": {
+              "type": "boolean",
+              "description": "True only when the user confirms the specific pending navigation destination from the preceding confirmation question."
+            },
+            "listId": {
+              "type": "string",
+              "description": "Current result list identifier returned by RESTROOM_SOS, when available. A changed list requires another selection."
+            }
+          },
+          "required": [
+            "operation"
           ]
         }
       }
