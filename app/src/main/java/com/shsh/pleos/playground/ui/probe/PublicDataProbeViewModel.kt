@@ -34,6 +34,8 @@ data class PublicDataProbeState(val busy: Boolean = false, val message: String =
     val nearbyCompleted: Boolean = false,
     val nearbyError: String? = null,
     val candidates: List<RestroomCandidate> = emptyList(),
+    val candidateSetId: String? = null,
+    val candidateSetCreatedAtMillis: Long = 0,
     val datasets: Map<FacilitySource, DatasetRestore> = emptyMap(),
     val collection: DatasetProgress? = null,
     val reference: FacilityReference? = null, val locationMessage: String = "거리 비교 전 · 마지막 위치를 조회하세요") {
@@ -75,14 +77,14 @@ class PublicDataProbeViewModel(application: Application) : AndroidViewModel(appl
     }
 
     fun findNearby() = query("SHSH_SOS", "주변 화장실") {
-        mutableState.update { it.copy(nearbySearching = true, nearbyCompleted = false, nearbyError = null, candidates = emptyList()) }
+        mutableState.update { it.copy(nearbySearching = true, nearbyCompleted = false, nearbyError = null, candidates = emptyList(), candidateSetId = null) }
         val fix = location.readLastKnownLocation() ?: throw PublicDataException("location_missing")
         if (!validFacilityCoordinates(fix.latitude, fix.longitude)) throw PublicDataException("invalid_location")
         val age = System.currentTimeMillis() - fix.timestampMillis
         if (fix.timestampMillis <= 0 || age < -60_000) throw PublicDataException("invalid_location_time")
         val reference = FacilityReference(fix.latitude, fix.longitude, fix.timestampMillis)
         val candidates = datasetRepository.nearby(reference)
-        mutableState.update { it.copy(reference = reference, candidates = candidates, nearbyCompleted = true,
+        mutableState.update { it.copy(reference = reference, candidates = candidates, candidateSetId = java.util.UUID.randomUUID().toString(), candidateSetCreatedAtMillis = android.os.SystemClock.elapsedRealtime(), nearbyCompleted = true,
             locationMessage = if (age > 300_000) "5분 이상 오래된 마지막 위치 기준 · 다시 확인 필요" else "마지막 위치 기준 · 측위 경과 ${age.coerceAtLeast(0) / 1000}초",
             message = "기기 자료에서 주변 후보 ${candidates.size}개 확인") }
         Log.i("SHSH_SOS", "Nearby candidates ready; count=${candidates.size}, radiusMeters=5000, parkingLinkMeters=300, stale=${age > 300_000}; coordinates omitted")
@@ -170,7 +172,7 @@ class PublicDataProbeViewModel(application: Application) : AndroidViewModel(appl
     }
 
     fun cancel() {
-        mutableState.value = mutableState.value.copy(reference = null, candidates = emptyList(), nearbySearching = false, nearbyCompleted = false, nearbyError = null, locationMessage = "거리 기준 없음 · 마지막 위치를 다시 조회하세요")
+        mutableState.value = mutableState.value.copy(reference = null, candidates = emptyList(), candidateSetId = null, nearbySearching = false, nearbyCompleted = false, nearbyError = null, locationMessage = "거리 기준 없음 · 마지막 위치를 다시 조회하세요")
         if (work?.isActive == true) {
             work?.cancel()
             location.close()
@@ -179,5 +181,10 @@ class PublicDataProbeViewModel(application: Application) : AndroidViewModel(appl
             Log.i("SHSH_SOS", "Public-data sample cancelled by user or lifecycle")
         }
     }
+    /** Preserve a completed on-screen snapshot across Gleo/Navigation foreground transitions. */
+    fun suspendWork() {
+        if (mutableState.value.busy && work?.isActive == true) cancel()
+    }
+
     override fun onCleared() { location.close(); super.onCleared() }
 }
