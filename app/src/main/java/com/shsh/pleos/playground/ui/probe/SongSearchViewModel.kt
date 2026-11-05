@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SongSearchUiState(val query: String = "", val busy: Boolean = false, val listening: Boolean = false,
+    val speechTranscript: String? = null,
     val message: String = "곡 제목과 가수를 입력하거나 음성 검색을 누르세요", val songs: List<Song> = emptyList(), val error: String? = null)
 
 class SongSearchViewModel(application: Application) : AndroidViewModel(application) {
@@ -25,13 +26,13 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
     private val mutableState = MutableStateFlow(SongSearchUiState())
     val uiState = mutableState.asStateFlow()
     private var work: Job? = null
-    fun edit(text: String) { if (!mutableState.value.busy) mutableState.update { it.copy(query = text.take(120), error = null) } }
+    fun edit(text: String) { if (!mutableState.value.busy) mutableState.update { it.copy(query = text.take(120), speechTranscript = null, error = null) } }
     fun search() {
         if (mutableState.value.busy) return
         val query = mutableState.value.query.trim()
         if (query.isEmpty()) { mutableState.update { it.copy(message = "곡 제목을 입력하세요") }; return }
         work = viewModelScope.launch {
-            mutableState.update { it.copy(busy = true, error = null, message = "YouTube에서 검색 중", songs = emptyList()) }
+            mutableState.update { it.copy(busy = true, speechTranscript = null, error = null, message = "웅키 채널에서 검색 중", songs = emptyList()) }
             try { performSearch(query) }
             catch (error: CancellationException) { throw error }
             catch (error: Exception) { fail(error) }
@@ -41,7 +42,7 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun performSearch(query: String, canPublish: () -> Boolean = { true }): List<Song> {
         val songs = repository.search(query)
         if (!canPublish()) throw CancellationException("Song search action expired")
-        mutableState.update { it.copy(songs = songs, message = if (songs.isEmpty()) "검색 결과 없음 · 곡명·가수를 바꿔주세요" else "YouTube 검색 결과 · 제목과 채널을 확인해 선택하세요") }
+        mutableState.update { it.copy(songs = songs, message = if (songs.isEmpty()) "웅키 채널에서 재생 가능한 결과가 없어요 · 곡명·가수를 바꿔주세요" else "웅키 채널 검색 결과 · 원하는 영상을 선택하세요") }
         return songs
     }
 
@@ -52,8 +53,8 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         // Set busy synchronously so a second command cannot launch a concurrent search.
-        mutableState.update { it.copy(query = query, busy = true, listening = false, error = null,
-            songs = emptyList(), message = "Gleo에서 전달받은 곡으로 검색 중") }
+        mutableState.update { it.copy(query = query, busy = true, listening = false, speechTranscript = null, error = null,
+            songs = emptyList(), message = "Gleo에서 전달받은 곡을 웅키 채널에서 검색 중") }
         work = viewModelScope.launch {
             try {
                 val songs = performSearch(query, canPublish)
@@ -71,12 +72,14 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
     fun voiceSearch() {
         if (mutableState.value.busy) return
         work = viewModelScope.launch {
-            mutableState.update { it.copy(busy = true, listening = true, error = null, songs = emptyList(), message = "음성 검색 준비 중") }
+            mutableState.update { it.copy(query = "", busy = true, listening = true, speechTranscript = "", error = null, songs = emptyList(), message = "음성 검색 준비 중") }
             try {
                 stt.initialize()
                 val result = stt.recognize { message, text ->
-                    mutableState.update { it.copy(message = message, query = text?.take(120) ?: it.query) }
+                    mutableState.update { it.copy(message = message, query = text?.take(120) ?: it.query,
+                        speechTranscript = text?.take(300) ?: it.speechTranscript) }
                 }
+                mutableState.update { it.copy(speechTranscript = result.text.take(300)) }
                 val query = result.text.trim().replace(Regex("\\s*(찾아\\s*줘|틀어\\s*줘|검색해\\s*줘)[.!?。]*$"), "").trim().take(120)
                 if (query.isBlank()) {
                     mutableState.update { it.copy(listening = false, message = "인식된 곡명이 없습니다 · 다시 말하거나 직접 입력하세요") }
