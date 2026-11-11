@@ -1,0 +1,68 @@
+{
+  "packageName": "com.shsh.pleos.playground",
+  "appDescription": "Noraehaja searches and plays Korean karaoke videos while parked, evaluates short recordings, and finds nearby restrooms with parking information and confirmed navigation handoff.",
+  "invokeWord": "노래하자",
+  "version": "1.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "SEARCH_SONG",
+        "description": "Runs a new video search using the song title or artist in the current request, replaces the displayed song results, and returns numbered matches.",
+        "component": "activity",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The song title, artist name, or both supplied in the current search request."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "CONTROL_KARAOKE",
+        "description": "Plays a numbered song from the latest karaoke search results while parked, or opens the Noraehaja app home screen.",
+        "component": "activity",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "SELECT",
+                "OPEN_HOME"
+              ],
+              "description": "SELECT plays a numbered song from the current results. OPEN_HOME returns to the Noraehaja app's main screen."
+            },
+            "index": {
+              "type": "number",
+              "description": "One-based integer result number required for SELECT. Omit for OPEN_HOME."
+            }
+          },
+          "required": [
+            "operation"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "CHECK_SOS_OVERLAY",
+        "description": "Checks the Noraehaja restroom SOS voice connection without opening the app, looking up a location, or changing navigation.",
+        "component": "service",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  ]
+}
