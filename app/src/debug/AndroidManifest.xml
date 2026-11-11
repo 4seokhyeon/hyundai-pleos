@@ -1,5 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="ai.umos.ambientai" />
+    </queries>
     <application android:networkSecurityConfig="@xml/debug_network_security_config">
         <activity android:name=".PlayerRenderProbeActivity" android:exported="false" />
+        <receiver
+            android:name=".GleoSosOverlayProbeReceiver"
+            android:enabled="${gleoSosOverlayProbeEnabled}"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="CHECK_SOS_OVERLAY" />
+                <action android:name="com.shsh.pleos.playground.CHECK_SOS_OVERLAY" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -36,6 +36,8 @@
                 <action android:name="com.shsh.pleos.playground.SEARCH_SONG" />
                 <action android:name="RESTROOM_SOS" />
                 <action android:name="com.shsh.pleos.playground.RESTROOM_SOS" />
+                <action android:name="CONTROL_KARAOKE" />
+                <action android:name="com.shsh.pleos.playground.CONTROL_KARAOKE" />
                 <action android:name="SELECT_SONG" />
                 <action android:name="com.shsh.pleos.playground.SELECT_SONG" />
                 <category android:name="android.intent.category.DEFAULT" />
