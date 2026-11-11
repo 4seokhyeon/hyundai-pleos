@@ -27,19 +27,27 @@
     {
       "type": "function",
       "function": {
-        "name": "SELECT_SONG",
-        "description": "Plays a song from the latest displayed song search results using the result number explicitly selected in the current user request, while parked.",
+        "name": "CONTROL_KARAOKE",
+        "description": "Plays a numbered song from the latest karaoke search results while parked, or opens the Noraehaja app home screen.",
         "component": "activity",
         "parameters": {
           "type": "object",
           "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "SELECT",
+                "OPEN_HOME"
+              ],
+              "description": "SELECT plays a numbered song from the current results. OPEN_HOME returns to the Noraehaja app's main screen."
+            },
             "index": {
-              "type": "integer",
-              "description": "One-based song result number explicitly selected in the current user request."
+              "type": "number",
+              "description": "One-based integer result number required for SELECT. Omit for OPEN_HOME."
             }
           },
           "required": [
-            "index"
+            "operation"
           ]
         }
       }
@@ -61,7 +69,7 @@
                 "SELECT",
                 "NAVIGATE"
               ],
-              "description": "FIND refreshes nearby restroom results. READ returns the current results. SELECT opens a candidate. NAVIGATE prepares a destination and requires confirmation before sending it."
+              "description": "FIND refreshes nearby restroom results. READ returns the current results. SELECT opens a candidate. NAVIGATE requires confirmation, then adds a waypoint during active guidance or sets a destination when no route is active."
             },
             "index": {
               "type": "integer",
