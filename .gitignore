@@ -70,3 +70,9 @@ __pycache__/
 *.pth
 *.ckpt
 /server/uploads/
+
+# Local release API settings; never commit credentials
+release.properties
+
+# Android Studio generated release artifacts; final APK goes in /apk/
+/app/release/
