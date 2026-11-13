@@ -14,7 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import com.shsh.pleos.playground.ui.probe.RecordingProbeViewModel
 import android.os.Bundle
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest

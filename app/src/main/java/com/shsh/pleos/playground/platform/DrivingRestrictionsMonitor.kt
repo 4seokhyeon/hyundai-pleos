@@ -4,7 +4,7 @@ import android.car.Car
 import android.car.drivingstate.CarUxRestrictionsManager
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 
 /** Start/close on main thread. Unknown and disconnected states always deny playback. */
 class DrivingRestrictionsMonitor(private val context: android.content.Context, private val onChanged: (Boolean, String) -> Unit) {

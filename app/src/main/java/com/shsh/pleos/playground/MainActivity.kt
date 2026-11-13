@@ -10,7 +10,7 @@ import com.shsh.pleos.playground.ui.karaoke.KaraokeHome
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge

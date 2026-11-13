@@ -29,6 +29,7 @@ val publicDataDevelopmentKey = quotedPublicDataKey("PUBLIC_DATA_API_KEY")
 // Debug defaults to headless SOS; -PgleoSosOverlayProbe=false restores legacy debug behavior.
 // Release keeps the main schema and has no overlay service.
 val gleoSosOverlayProbe = providers.gradleProperty("gleoSosOverlayProbe").map { it == "true" }.orElse(true)
+val enableAppLogs = providers.gradleProperty("enableAppLogs").map { it == "true" }.orElse(false)
 
 android {
     if (gleoSosOverlayProbe.get()) {
@@ -53,12 +54,14 @@ android {
         buildConfigField("String", "GG_DATA_API_KEY", "\"\"")
         buildConfigField("String", "PUBLIC_DATA_API_KEY", "\"\"")
         buildConfigField("boolean", "SOS_OVERLAY_ENABLED", "false")
+        buildConfigField("boolean", "ENABLE_APP_LOGS", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
+            buildConfigField("boolean", "ENABLE_APP_LOGS", enableAppLogs.get().toString())
             manifestPlaceholders["gleoSosOverlayProbeEnabled"] = gleoSosOverlayProbe.get().toString()
             buildConfigField("boolean", "SOS_OVERLAY_ENABLED", gleoSosOverlayProbe.get().toString())
             buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeDevelopmentKey\"")

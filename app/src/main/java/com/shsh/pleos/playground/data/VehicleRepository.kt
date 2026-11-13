@@ -1,7 +1,7 @@
 package com.shsh.pleos.playground.data
 
 import android.content.Context
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.api.model.area.DoorArea
 import ai.pleos.playground.vehicle.api.model.capability.AccessType

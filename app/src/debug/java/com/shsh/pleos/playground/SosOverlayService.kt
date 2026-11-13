@@ -9,7 +9,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.*
 import android.provider.Settings
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager

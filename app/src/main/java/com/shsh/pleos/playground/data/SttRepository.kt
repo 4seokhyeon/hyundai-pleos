@@ -1,7 +1,7 @@
 package com.shsh.pleos.playground.data
 
 import android.content.Context
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import ai.pleos.playground.stt.SpeechToText
 import ai.pleos.playground.stt.constant.ErrorType
 import ai.pleos.playground.stt.constant.Mode

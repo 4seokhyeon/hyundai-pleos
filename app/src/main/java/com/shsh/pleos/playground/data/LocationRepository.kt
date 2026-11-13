@@ -2,7 +2,7 @@ package com.shsh.pleos.playground.data
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.core.content.ContextCompat
 import ai.pleos.playground.location.fused.FusedLocation
 import ai.pleos.playground.location.fused.listener.FusedLocationListener

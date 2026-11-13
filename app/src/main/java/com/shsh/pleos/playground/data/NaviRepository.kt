@@ -1,7 +1,7 @@
 package com.shsh.pleos.playground.data
 
 import android.content.Context
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import ai.pleos.playground.navi.constants.NaviErrorCode
 import ai.pleos.playground.navi.constants.NaviMode
 import ai.pleos.playground.navi.constants.WaypointCmdType

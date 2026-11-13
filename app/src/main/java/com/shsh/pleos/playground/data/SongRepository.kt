@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.text.Html
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import com.shsh.pleos.playground.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection

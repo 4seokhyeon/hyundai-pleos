@@ -2,7 +2,7 @@ package com.shsh.pleos.playground.data
 
 import android.content.Context
 import android.util.AtomicFile
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest

@@ -6,18 +6,9 @@
 # Local Android SDK paths and machine-specific settings
 local.properties
 
-# Android Studio local state (keep shared project settings in Git)
+# Android Studio project settings
+.idea/
 *.iml
-.idea/caches/
-.idea/libraries/
-.idea/modules.xml
-.idea/workspace.xml
-.idea/navEditor.xml
-.idea/assetWizardSettings.xml
-.idea/shelf/
-.idea/httpRequests/
-.idea/usage.statistics.xml
-.idea/deploymentTargetDropDown.xml
 
 # Native build outputs
 .externalNativeBuild/

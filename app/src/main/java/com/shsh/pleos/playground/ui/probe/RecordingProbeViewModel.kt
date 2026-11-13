@@ -4,7 +4,7 @@ import android.app.Application
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shsh.pleos.playground.data.ScoringRepository

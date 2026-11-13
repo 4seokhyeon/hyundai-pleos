@@ -3,7 +3,7 @@ package com.shsh.pleos.playground
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.os.Bundle
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail

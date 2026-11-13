@@ -2,7 +2,7 @@ package com.shsh.pleos.playground
 
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.activity.ComponentActivity
 import android.content.Intent
 import org.json.JSONArray

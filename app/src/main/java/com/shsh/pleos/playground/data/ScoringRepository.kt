@@ -1,6 +1,6 @@
 package com.shsh.pleos.playground.data
 
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import com.shsh.pleos.playground.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.io.File

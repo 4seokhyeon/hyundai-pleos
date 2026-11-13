@@ -2,7 +2,7 @@ package com.shsh.pleos.playground.data
 
 import android.os.SystemClock
 import android.net.Uri
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import android.util.Xml
 import com.shsh.pleos.playground.BuildConfig
 import java.io.ByteArrayOutputStream

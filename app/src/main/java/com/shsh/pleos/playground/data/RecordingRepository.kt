@@ -9,7 +9,7 @@ import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.SystemClock
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.RandomAccessFile

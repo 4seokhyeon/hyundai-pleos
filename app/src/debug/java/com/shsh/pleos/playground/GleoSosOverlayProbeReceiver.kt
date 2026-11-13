@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Build
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import com.shsh.pleos.playground.gleo.GleoReply
 import com.shsh.pleos.playground.gleo.sendGleoReply
 

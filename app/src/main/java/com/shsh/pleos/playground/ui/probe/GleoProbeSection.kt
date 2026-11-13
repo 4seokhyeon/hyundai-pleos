@@ -1,7 +1,7 @@
 package com.shsh.pleos.playground.ui.probe
 
 import android.content.Intent
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth

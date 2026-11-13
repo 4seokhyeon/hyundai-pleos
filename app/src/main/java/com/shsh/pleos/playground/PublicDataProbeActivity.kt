@@ -29,7 +29,7 @@ import kotlin.math.roundToInt
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import android.util.Log
+import com.shsh.pleos.playground.platform.AppLog as Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
