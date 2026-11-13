@@ -3,13 +3,23 @@ package com.shsh.pleos.playground.data
 import android.content.Context
 import android.util.Log
 import ai.pleos.playground.navi.constants.NaviErrorCode
+import ai.pleos.playground.navi.constants.NaviMode
+import ai.pleos.playground.navi.constants.WaypointCmdType
+import ai.pleos.playground.navi.constants.WaypointIndex
+import ai.pleos.playground.navi.data.RequestWaypointInfo
+import ai.pleos.playground.navi.data.WaypointChangedInfo
+import ai.pleos.playground.navi.data.WaypointInfo
 import ai.pleos.playground.navi.data.DestinationInfo
 import ai.pleos.playground.navi.data.RouteInfo
 import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.RouteStateInfo
+import ai.pleos.playground.navi.constants.RoutePointType
+import ai.pleos.playground.navi.data.TripInfo
+import ai.pleos.playground.navi.data.TripRequest
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
 import ai.pleos.playground.navi.helper.NaviHelper
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
@@ -146,6 +156,156 @@ class NaviRepository(context: Context) {
                     Log.i("SHSH_NAVI", "SOS requestRoute dispatched; source=public_data_coordinates; poiIdPresent=false; values omitted")
                     if (!completed.get()) instance.getDestinationInfo()
                 }
+            }
+        } finally { removeRouteListener(instance) }
+    }
+
+    data class SosStop(val name: String, val latitude: Double, val longitude: Double) {
+        fun matches(facility: CachedFacility): Boolean =
+            name.trim() == facility.name.trim() &&
+                (FacilityReference(latitude, longitude, 0).distanceMetersTo(facility.latitude, facility.longitude)
+                    ?: Double.POSITIVE_INFINITY) <= 30
+    }
+
+    data class SosRoute(val destination: SosStop, val waypoints: List<SosStop>)
+
+    suspend fun readActiveSosRoute(): SosRoute? = readActiveSosRoute(readRouteState())
+
+    suspend fun readActiveSosRoute(state: RouteStateInfo): SosRoute? {
+        if (!state.isRouting && state.naviMode != NaviMode.ROUTE_GUIDING && state.naviMode != NaviMode.SIMULATION_GUIDING)
+            return null
+        val instance = checkNotNull(helper)
+        check(routeListener == null)
+        return try {
+            suspendCancellableCoroutine<SosRoute?> { continuation ->
+                val terminal = AtomicBoolean(false)
+                continuation.invokeOnCancellation { terminal.set(true) }
+                val destination = AtomicReference<SosStop?>()
+                val waypoints = AtomicReference<List<SosStop>?>()
+                fun complete() {
+                    val stop = destination.get() ?: return
+                    val points = waypoints.get() ?: return
+                    if (terminal.compareAndSet(false, true)) continuation.resume(SosRoute(stop, points))
+                }
+                val listener = object : NaviHelperEventListener {
+                    override fun onDestinationInfo(destinationInfo: DestinationInfo) {
+                        if (!validFacilityCoordinates(destinationInfo.latitude, destinationInfo.longitude)) {
+                            if (terminal.compareAndSet(false, true)) continuation.resume(null)
+                            return
+                        }
+                        destination.set(SosStop(destinationInfo.name, destinationInfo.latitude, destinationInfo.longitude))
+                        complete()
+                    }
+                    override fun onWayPointInfo(waypointInfoList: List<WaypointInfo>) {
+                        waypoints.set(waypointInfoList.map { SosStop(it.name, it.latitude, it.longitude) })
+                        complete()
+                    }
+                    override fun onError(errorCode: NaviErrorCode) {
+                        if (terminal.compareAndSet(false, true))
+                            continuation.resumeWithException(IllegalStateException("navi_error_$errorCode"))
+                    }
+                }
+                routeListener = listener
+                instance.addListener(listener)
+                instance.getDestinationInfo()
+                instance.getWaypointInfo()
+            }
+        } finally { removeRouteListener(instance) }
+    }
+
+    /** Reads a driving ETA without setting a destination or changing the active route. */
+    suspend fun readParkingEtaSeconds(parking: CachedFacility): Int? {
+        require(validFacilityCoordinates(parking.latitude, parking.longitude))
+        val instance = checkNotNull(helper)
+        check(routeListener == null)
+        return try {
+            suspendCancellableCoroutine<Int?> { continuation ->
+                val done = AtomicBoolean(false)
+                continuation.invokeOnCancellation { done.set(true) }
+                val listener = object : NaviHelperEventListener {
+                    override fun onTripInfo(tripInfo: TripInfo) {
+                        // The SDK callback has no request ID. Only accept a response
+                        // whose destination matches the requested facility.
+                        val stop = tripInfo.summary.routePoints.lastOrNull { it.pointType == RoutePointType.DESTINATION }
+                            ?: return
+                        val distance = FacilityReference(parking.latitude, parking.longitude, 0)
+                            .distanceMetersTo(stop.latitude, stop.longitude)
+                        if (distance == null || distance > 30) return
+                        if (done.compareAndSet(false, true))
+                            continuation.resume(tripInfo.eta.takeIf { it > 0 })
+                    }
+
+                    override fun onError(errorCode: NaviErrorCode) {
+                        if (done.compareAndSet(false, true)) continuation.resume(null)
+                    }
+                }
+                routeListener = listener
+                instance.addListener(listener)
+                instance.requestTrip(TripRequest(
+                    latitude = parking.latitude, longitude = parking.longitude,
+                    poiId = "", poiName = parking.name, poiSubId = null
+                ))
+            }
+        } finally { removeRouteListener(instance) }
+    }
+
+    /** Confirms the new first waypoint and checks that all previous stops were preserved. */
+    suspend fun addSosWaypoint(parking: CachedFacility, route: SosRoute, maySend: () -> Boolean, onSent: () -> Unit) {
+        require(validFacilityCoordinates(parking.latitude, parking.longitude))
+        val instance = checkNotNull(helper)
+        check(routeListener == null)
+        try {
+            suspendCancellableCoroutine<Unit> { continuation ->
+                val terminal = AtomicBoolean(false)
+                val sent = AtomicBoolean(false)
+                val changeSeen = AtomicBoolean(false)
+                val destinationMatches = AtomicBoolean(false)
+                val waypointsMatch = AtomicBoolean(false)
+                continuation.invokeOnCancellation { terminal.set(true) }
+                fun complete() {
+                    if (destinationMatches.get() && waypointsMatch.get() && terminal.compareAndSet(false, true))
+                        continuation.resume(Unit)
+                }
+                val listener = object : NaviHelperEventListener {
+                    override fun onWaypointChanged(waypointChangedInfo: WaypointChangedInfo) {
+                        if (!sent.get() || terminal.get() || waypointChangedInfo.cmdType != WaypointCmdType.ADD ||
+                            waypointChangedInfo.index != WaypointIndex.FIRST || !changeSeen.compareAndSet(false, true)) return
+                        try {
+                            instance.getDestinationInfo()
+                            instance.getWaypointInfo()
+                        } catch (error: Exception) {
+                            if (terminal.compareAndSet(false, true)) continuation.resumeWithException(error)
+                        }
+                    }
+                    override fun onDestinationInfo(destinationInfo: DestinationInfo) {
+                        if (!changeSeen.get()) return
+                        val actual = SosStop(destinationInfo.name, destinationInfo.latitude, destinationInfo.longitude)
+                        destinationMatches.set(actual == route.destination)
+                        if (actual != route.destination)
+                            Log.w("SHSH_NAVI", "SOS addWaypoint destination mismatch; values omitted")
+                        complete()
+                    }
+                    override fun onWayPointInfo(waypointInfoList: List<WaypointInfo>) {
+                        if (!changeSeen.get()) return
+                        val actual = waypointInfoList.map { SosStop(it.name, it.latitude, it.longitude) }
+                        waypointsMatch.set(actual.firstOrNull()?.matches(parking) == true && actual.drop(1) == route.waypoints)
+                        complete()
+                    }
+                    override fun onError(errorCode: NaviErrorCode) {
+                        if (sent.get() && terminal.compareAndSet(false, true))
+                            continuation.resumeWithException(IllegalStateException("navi_error_$errorCode"))
+                    }
+                }
+                routeListener = listener
+                instance.addListener(listener)
+                check(maySend() && continuation.isActive)
+                sent.set(true)
+                onSent()
+                instance.addWaypoint(RequestWaypointInfo(
+                    latitude = parking.latitude, longitude = parking.longitude, poiName = parking.name,
+                    waypointIndex = WaypointIndex.FIRST, poiId = "", address = parking.address, poiSubId = ""
+                ))
+                Log.i("SHSH_NAVI", "SOS addWaypoint dispatched; verifying original destination; values omitted")
             }
         } finally { removeRouteListener(instance) }
     }

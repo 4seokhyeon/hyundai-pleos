@@ -68,7 +68,7 @@ class SongRepository(context: Context) {
         val items = body.optJSONArray("items")
         val id = if (items?.length() == 1) items.optJSONObject(0)?.optString("id").orEmpty() else ""
         if (!Regex("UC[A-Za-z0-9_-]{22}").matches(id)) {
-            throw SongSearchException("channel_unavailable", "웅키 채널을 확인하지 못했어요. 채널 주소와 네트워크를 확인해 주세요.")
+            throw SongSearchException("channel_unavailable", "확인하지 못했어요. 채널 주소와 네트워크를 확인해 주세요.")
         }
         resolvedChannelId = id
         Log.i("SHSH_SEARCH", "Configured channel resolved; handle=$CHANNEL_HANDLE; no global-search fallback")

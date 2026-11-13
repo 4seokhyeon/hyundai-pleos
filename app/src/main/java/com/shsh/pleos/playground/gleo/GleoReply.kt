@@ -26,7 +26,7 @@ data class GleoReply(val status: String, val message: String, val data: String? 
                 data.put(JSONObject().put("index", index + 1).put("videoId", song.videoId)
                     .put("title", song.title.take(300)))
             }
-            // A completed search is terminal. Selection is a separate SELECT_SONG request,
+            // A completed search is terminal. Selection uses a separate control request,
             // so a later song query is not kept inside an outstanding selection question.
             return GleoReply("success", if (songs.isEmpty()) "The search completed, but no matching videos were found."
                 else "The search completed. ${songs.size} results are displayed. Playback has not started.", data.toString(), reason = if (songs.isEmpty()) "no_matches" else "search_completed")

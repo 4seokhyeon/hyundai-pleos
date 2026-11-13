@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.shsh.pleos.playground.BuildConfig
 import com.shsh.pleos.playground.data.RestroomCandidate
 import com.shsh.pleos.playground.data.FacilitySource
 import com.shsh.pleos.playground.ui.karaoke.*
@@ -27,7 +28,7 @@ fun formatFacilityDistance(meters: Double): String = if(meters<1000) "${meters.r
 @Composable
 fun SosScreen(state: PublicDataProbeState,allowed: Boolean,selected: RestroomCandidate?,onSelect: (RestroomCandidate?)->Unit,
     onFind: ()->Unit,onCancel: ()->Unit,onData: ()->Unit,onHome: ()->Unit,
-    navigation: SosNavigationState,onNavigate: (String)->Unit) {
+    navigation: SosNavigationState,waypointOnly: Boolean,onRecommend: ()->Unit,onNavigate: (String)->Unit) {
     val ready=FacilitySource.entries.all { state.datasets[it]?.summary!=null }
     DesignShell(if(selected!=null) "화장실 SOS · 확인" else if(state.nearbySearching) "화장실 SOS · 찾는 중" else "화장실 SOS · 후보",allowed,onHome=onHome,onData=onData) {
         when {
@@ -35,7 +36,7 @@ fun SosScreen(state: PublicDataProbeState,allowed: Boolean,selected: RestroomCan
             state.cacheLoading -> CenterState("LOCAL DATA","저장 자료 확인 중","기기에 준비된 시설 자료를 읽고 있어요.","toilet",C.Amber,busy=true) {}
             state.nearbySearching -> CenterState("NEARBY SEARCH","화장실을 찾을게요","차량 마지막 위치와 기기 저장 자료를 비교해요. 위치는 외부 API로 보내지 않아요.","toilet",C.Amber,busy=true) { Action("취소",secondary=true,icon="close",onClick=onCancel) }
             state.nearbyError!=null -> ErrorScreen("주변 검색을 완료하지 못했어요",state.nearbyError,onCancel=onCancel,onRetry=onFind)
-            selected!=null -> ConfirmCandidate(selected,navigation,onNavigate,onBack={onSelect(null)})
+            selected!=null -> ConfirmCandidate(selected,navigation,waypointOnly,onNavigate,onBack={onSelect(null)})
             !ready -> CenterState("SOS DATA PREPARATION","화장실 SOS를 준비해요","먼저 화장실과 주차장 자료를 기기에 준비해 주세요.","toilet",C.Amber) { Action("데이터 준비 열기",icon="upload",onClick=onData) }
             !state.nearbyCompleted -> CenterState("SOS NEARBY SEARCH","가까운 화장실을 찾을까요?","경기 지역 화장실을 마지막 위치 기준 5km 안에서 찾아요. 음악은 이 화면에 들어올 때 멈춰요.","toilet",C.Amber) {
                 Action("현재 위치로 찾기",icon="search",onClick=onFind)
@@ -44,13 +45,15 @@ fun SosScreen(state: PublicDataProbeState,allowed: Boolean,selected: RestroomCan
             state.candidates.isEmpty() -> CenterState("NO NEARBY CANDIDATES","주변 후보가 없어요","경기 화장실 저장 자료에서 마지막 위치 기준 5km 안의 후보를 찾지 못했어요. 에뮬레이터 위치와 자료 수집 상태를 확인해 주세요.","toilet",C.Amber) {
                 Action("위치 다시 확인",icon="retry",enabled=!navigation.busy,onClick=onFind); Spacer(Modifier.height(12.dp)); Action("데이터 관리",secondary=true,onClick=onData)
             }
-            else -> CandidateResults(state,onSelect,onFind,!navigation.busy)
+            else -> CandidateResults(state,onSelect,onFind,navigation,onRecommend)
         }
     }
 }
 
 @Composable
-private fun CandidateResults(state: PublicDataProbeState,onSelect: (RestroomCandidate)->Unit,onFind: ()->Unit,enabled: Boolean) {
+private fun CandidateResults(state: PublicDataProbeState,onSelect: (RestroomCandidate)->Unit,onFind: ()->Unit,
+    navigation: SosNavigationState,onRecommend: ()->Unit) {
+    val enabled = !navigation.busy
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val columns=if(maxWidth>=1680.dp) 3 else if(maxWidth>=1120.dp) 2 else 1
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=40.dp,vertical=28.dp),verticalArrangement=Arrangement.spacedBy(24.dp)) {
@@ -59,6 +62,12 @@ private fun CandidateResults(state: PublicDataProbeState,onSelect: (RestroomCand
                 Action("다시 찾기",secondary=true,icon="retry",enabled=enabled,onClick=onFind)
             }
             Text("${state.locationMessage} · 5km 안 ${state.candidates.size}개 후보 · 모든 거리는 직선거리",color=C.Muted,style=MaterialTheme.typography.bodySmall)
+            if (BuildConfig.DEBUG && state.candidates.any { it.parking != null }) {
+                Action("운전 시간으로 후보 비교",secondary=true,icon="nav",enabled=enabled,onClick=onRecommend)
+                if (navigation.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (navigation.busy || navigation.message != SosNavigationState().message)
+                    Text(navigation.message,color=C.Muted,style=MaterialTheme.typography.bodySmall)
+            }
             state.candidates.chunked(columns).forEachIndexed { rowIndex,row ->
                 Row(horizontalArrangement=Arrangement.spacedBy(18.dp)) {
                     row.forEachIndexed { index,candidate ->
@@ -87,13 +96,14 @@ private fun CandidateResults(state: PublicDataProbeState,onSelect: (RestroomCand
 }
 
 @Composable
-private fun ConfirmCandidate(candidate: RestroomCandidate,navigation: SosNavigationState,onNavigate: (String)->Unit,onBack: ()->Unit) {
+private fun ConfirmCandidate(candidate: RestroomCandidate,navigation: SosNavigationState,waypointOnly: Boolean,onNavigate: (String)->Unit,onBack: ()->Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide=maxWidth>=1280.dp
         val details: @Composable ()->Unit = {
             Surface(color=C.Panel,shape=RoundedCornerShape(26.dp),border=BorderStroke(1.dp,C.Border)) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(32.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-                    Eyebrow("DESTINATION CHECK"); Text("이곳을 확인해 주세요",style=MaterialTheme.typography.headlineMedium)
+                    Eyebrow(if (waypointOnly) "WAYPOINT" else "DESTINATION CHECK")
+                    Text(if (waypointOnly) "추천 경유지" else "이곳을 확인해 주세요",style=MaterialTheme.typography.headlineMedium)
                     Chip("현재 개방 확인 필요",C.Amber)
                     Text(candidate.restroom.name,style=MaterialTheme.typography.headlineSmall)
                     Text(candidate.restroom.address,color=C.Muted)
@@ -110,8 +120,12 @@ private fun ConfirmCandidate(candidate: RestroomCandidate,navigation: SosNavigat
                     Text(navigation.message,color=if(navigation.confirmed) C.Mint else C.Muted,style=MaterialTheme.typography.bodyMedium)
                     if(navigation.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                        Action("화장실로 내비 안내",enabled=!navigation.busy,icon="nav",modifier=Modifier.fillMaxWidth(),onClick={onNavigate("RESTROOM")})
-                        if(candidate.parking!=null) Action("인근 주차장으로 안내",secondary=true,enabled=!navigation.busy,icon="nav",modifier=Modifier.fillMaxWidth(),onClick={onNavigate("PARKING")})
+                        if (!waypointOnly) {
+                            Action("화장실로 안내",enabled=!navigation.busy,icon="nav",modifier=Modifier.fillMaxWidth(),onClick={onNavigate("RESTROOM")})
+                            if(candidate.parking!=null) Action("주차장으로 안내",secondary=true,enabled=!navigation.busy,icon="nav",modifier=Modifier.fillMaxWidth(),onClick={onNavigate("PARKING")})
+                        }
+                        if(BuildConfig.DEBUG && candidate.parking!=null) Action("주차장을 경유지로 추가",secondary=!waypointOnly,
+                            enabled=!navigation.busy,icon="nav",modifier=Modifier.fillMaxWidth(),onClick={onNavigate("PARKING_WAYPOINT")})
                         Action("다른 곳 보기",secondary=true,enabled=!navigation.busy,modifier=Modifier.fillMaxWidth(),onClick=onBack)
                     }
                 }
@@ -119,7 +133,7 @@ private fun ConfirmCandidate(candidate: RestroomCandidate,navigation: SosNavigat
         }
         if(wide) Row(Modifier.fillMaxSize().padding(32.dp),horizontalArrangement=Arrangement.spacedBy(40.dp),verticalAlignment=Alignment.CenterVertically) {
             Box(Modifier.weight(1.25f).fillMaxHeight()) { details() }
-            Column(Modifier.weight(.75f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(24.dp)) { Orb("toilet"); Eyebrow("LOCATION SUMMARY"); Text("시설 위치 요약",style=MaterialTheme.typography.headlineSmall); Text("화장실 또는 인근 주차장을\n목적지로 선택해 주세요.",color=C.Muted) }
+            Column(Modifier.weight(.75f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(24.dp)) { Orb("toilet"); Eyebrow("LOCATION SUMMARY"); Text("시설 위치 요약",style=MaterialTheme.typography.headlineSmall); Text(if (waypointOnly) "원래 목적지를 유지하고\n주차장에 먼저 들러요." else "내비 안내 중에는\n선택한 곳을 경유지로 추가해요.",color=C.Muted) }
         } else Box(Modifier.fillMaxSize().padding(24.dp)) { details() }
     }
 }

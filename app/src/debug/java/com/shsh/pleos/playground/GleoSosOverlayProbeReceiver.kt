@@ -9,10 +9,12 @@ import android.util.Log
 import com.shsh.pleos.playground.gleo.GleoReply
 import com.shsh.pleos.playground.gleo.sendGleoReply
 
-/** Opt-in debug probe. No location, application UI launch, or Navigation APIs. */
+/** Opt-in debug headless SOS. Only OS-authenticated system Gleo may use the prepared session. */
 class GleoSosOverlayProbeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION && intent.action != "${context.packageName}.$ACTION") return
+        val isProbe = intent.action == ACTION || intent.action == "${context.packageName}.$ACTION"
+        val isSos = intent.action == "RESTROOM_SOS" || intent.action == "${context.packageName}.RESTROOM_SOS"
+        if ((!isProbe && !isSos) || !BuildConfig.SOS_OVERLAY_ENABLED) return
         if (Build.VERSION.SDK_INT < 34) {
             Log.i(TAG, "Overlay probe received; sender identity API unavailable")
             return
@@ -38,6 +40,27 @@ class GleoSosOverlayProbeReceiver : BroadcastReceiver() {
             return
         }
         Log.i(TAG, "Overlay probe received; built-in Gleo sender verified; no Activity launch")
+        if (isSos) {
+            val request = runCatching { com.shsh.pleos.playground.gleo.GleoSosContract.readPublic(intent) }.getOrNull()
+            if (request == null || request.operation != "FIND") {
+                sendGleoReply(context, GleoReply("fail", "Request a restroom parking search, then use the displayed options.",
+                    reason = "overlay_invalid_operation", functionName = "RESTROOM_SOS"), diagnostic = false)
+                return
+            }
+            val result = if (request.diagnostic) "diagnostic_no_route_change" else SosOverlayService.requestSearch()
+            Log.i("SHSH_SOS_OVERLAY", "Gleo overlay request; result=$result")
+            sendGleoReply(context, GleoReply(if (result == "accepted") "success" else "fail",
+                when (result) {
+                    "accepted" -> "The restroom parking search has started in a small overlay. No destination has been changed yet."
+                    "overlay_session_not_ready" -> "Prepare the Noraehaja debug SOS session while parked before using it."
+                    "overlay_permission" -> "Allow Noraehaja to display over other apps before using this feature."
+                    "overlay_window_unavailable" -> "The overlay window could not be opened. Check overlay permission and platform support."
+                    "overlay_busy" -> "An SOS search or display check is already in progress."
+                    "vehicle_restricted_or_unknown" -> "The vehicle does not currently allow this operation."
+                    else -> "The SOS search could not start. Check the prepared session."
+                }, reason = "overlay_$result", functionName = "RESTROOM_SOS"), diagnostic = request.diagnostic)
+            return
+        }
         sendGleoReply(context, GleoReply("success", "The restroom SOS voice connection was checked. The navigation route was not changed.",
             reason = "overlay_probe_confirmed", functionName = ACTION), diagnostic = false)
     }

@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.i("SHSH_APP", "Karaoke home started; dark design applied")
+        Log.i("SHSH_SOS_PROBE", "SOS build mode; headlessOverlay=${BuildConfig.SOS_OVERLAY_ENABLED}")
         enableEdgeToEdge()
         setContent {
             var diagnostics by rememberSaveable { mutableStateOf(false) }

@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.lifecycle.lifecycleScope
 import com.shsh.pleos.playground.data.CachedFacility
+import com.shsh.pleos.playground.data.NaviRepository
 import com.shsh.pleos.playground.data.validFacilityCoordinates
 import com.shsh.pleos.playground.gleo.GleoSosContract
 import com.shsh.pleos.playground.gleo.GleoReply
@@ -60,13 +61,15 @@ class PublicDataProbeActivity : ComponentActivity() {
     private val voiceHandler = Handler(Looper.getMainLooper())
     private var voiceTimeout: Runnable? = null
     private data class DestinationChoice(val candidate: RestroomCandidate, val index: Int, val listId: String,
-        val target: String, val facility: CachedFacility)
+        val target: String, val facility: CachedFacility, val asWaypoint: Boolean = false,
+        val expectedRoute: NaviRepository.SosRoute? = null)
     private var pendingDestination by mutableStateOf<DestinationChoice?>(null)
     private var monitor: DrivingRestrictionsMonitor? = null
     private var allowed by mutableStateOf(false)
     private var showDiagnostics by mutableStateOf(false)
     private var showData by mutableStateOf(false)
     private var selected by mutableStateOf<RestroomCandidate?>(null)
+    private var recommendedRoute by mutableStateOf<NaviRepository.SosRoute?>(null)
     private val locationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         model.onLocationPermissionResult(granted)
     }
@@ -82,37 +85,68 @@ class PublicDataProbeActivity : ComponentActivity() {
             val state by model.uiState.collectAsStateWithLifecycle()
             val navigationState by navigation.state.collectAsStateWithLifecycle()
             BackHandler(enabled = showDiagnostics || showData || selected != null) {
-                when { showDiagnostics -> showDiagnostics = false; selected != null -> selected = null; else -> { model.cancel(); showData = false } }
+                when { showDiagnostics -> showDiagnostics = false; selected != null -> { selected = null; recommendedRoute = null; pendingDestination = null; navigation.reset() }; else -> { model.cancel(); showData = false } }
             }
             PleosSdkPlaygroundTheme {
                 if (!showDiagnostics && !showData) {
                     SosScreen(state, allowed, selected, onSelect = {
-                        if(!navigationState.busy) { cancelVoice("manual_selection"); pendingDestination=null; navigation.reset(); selected=it }
+                        if(!navigationState.busy) { cancelVoice("manual_selection"); pendingDestination=null; navigation.reset(); selected=it; recommendedRoute=null }
                     },
                         onFind = {
                             if (allowed && !navigationState.busy) {
-                                cancelVoice("manual_search"); pendingDestination=null; navigation.reset(); selected = null
+                                cancelVoice("manual_search"); pendingDestination=null; navigation.reset(); selected = null; recommendedRoute = null
                                 if (ContextCompat.checkSelfPermission(this@PublicDataProbeActivity, LocationRepository.PERMISSION) == PackageManager.PERMISSION_GRANTED) model.findNearby()
                                 else locationPermission.launch(LocationRepository.PERMISSION)
                             }
                         }, onCancel = { cancelVoice("user_cancelled"); pendingDestination=null; model.cancel() },
                         onData = { if(!navigationState.busy) { cancelVoice("screen_changed"); model.cancel(); showData = true } }, onHome = { finish() },
-                        navigation=navigationState, onNavigate={ target ->
+                        navigation=navigationState, waypointOnly=recommendedRoute != null, onRecommend={
+                            if (BuildConfig.DEBUG && allowed && resumed && !navigationState.busy) {
+                                cancelVoice("manual_recommendation")
+                                pendingDestination = null
+                                val snapshot = model.uiState.value
+                                fun isCurrent(): Boolean {
+                                    val latest = model.uiState.value
+                                    val age = System.currentTimeMillis() - (snapshot.reference?.measuredAtMillis ?: 0L)
+                                    return allowed && resumed && !latest.busy && snapshot.candidateSetId != null &&
+                                        snapshot.candidateSetId == latest.candidateSetId && age in 0L..120_000L
+                                }
+                                if (isCurrent()) navigation.recommend(snapshot.candidates, ::isCurrent) { candidate, route ->
+                                    selected = candidate
+                                    recommendedRoute = route
+                                }
+                                else navigation.report("현재 위치로 다시 찾은 뒤 후보를 비교해 주세요.")
+                            }
+                        }, onNavigate={ target ->
                             if(allowed && !navigationState.busy) {
                                 cancelVoice("manual_navigation")
-                                pendingDestination = chooseDestination(null,target,null)
+                                val route = recommendedRoute
+                                val waypoint = BuildConfig.DEBUG && target == "PARKING_WAYPOINT"
+                                pendingDestination = if (route != null && !waypoint) null else
+                                    chooseDestination(null, if (waypoint) "PARKING" else target, null)
+                                        ?.copy(asWaypoint = waypoint, expectedRoute = route)
                                 if(pendingDestination==null) navigation.report("목록이 바뀌었거나 오래됐어요. 다시 찾은 뒤 목적지를 선택해 주세요.")
                             }
                         })
                     pendingDestination?.takeIf { allowed }?.let { choice ->
                         AlertDialog(onDismissRequest={pendingDestination=null},
-                            title={Text(if(choice.target=="PARKING") "이 주차장으로 안내할까요?" else "이 화장실로 안내할까요?")},
-                            text={Text("${choice.facility.name}\n${choice.facility.address}\n\n기존 내비 목적지가 변경될 수 있어요. 등록된 시설 좌표를 전달하며 실제 진입로·개방·주차 빈자리는 확인되지 않았어요.")},
+                            title={Text(when {
+                                choice.asWaypoint -> "이 주차장을 다음 경유지로 추가할까요?"
+                                choice.target=="PARKING" -> "이 주차장으로 안내할까요?"
+                                else -> "이 화장실로 안내할까요?"
+                            })},
+                            text={
+                                val routeNotice = if (choice.asWaypoint) "현재 안내 중인 경로에 추가하며 최종 목적지는 유지해요."
+                                    else "안내 중이면 현재 목적지를 유지하고 다음 경유지로 추가해요. 안내 중인 경로가 없으면 새 목적지로 설정해요."
+                                Text("${choice.facility.name}\n${choice.facility.address}\n\n$routeNotice 등록된 시설 좌표를 전달하며 실제 진입로·개방·주차 빈자리는 확인되지 않았어요.")
+                            },
                             confirmButton={TextButton(onClick={
                                 pendingDestination=null
-                                if(allowed && choiceIsCurrent(choice)) navigation.send(choice.facility,{allowed && resumed && choiceIsCurrent(choice)})
+                                if(allowed && choiceIsCurrent(choice)) navigation.send(choice.facility,
+                                    {allowed && resumed && choiceIsCurrent(choice)}, asWaypoint = choice.asWaypoint,
+                                    expectedRoute = choice.expectedRoute)
                                 else navigation.report("목적지를 다시 선택해 주세요. 현재 목록과 차량 허용 상태를 확인하세요.")
-                            }){Text("내비로 보내기")}},
+                            }){Text(if (choice.asWaypoint) "경유지로 추가" else "안내 요청")}},
                             dismissButton={TextButton(onClick={pendingDestination=null}){Text("취소")}})
                     }
                     return@PleosSdkPlaygroundTheme
@@ -220,7 +254,7 @@ class PublicDataProbeActivity : ComponentActivity() {
                             }
                             model.uiState.first { !it.cacheLoading }
                             if(model.uiState.value.busy) { completeVoice(GleoSosContract.reply("fail","Facility data is busy. Try again after the current task.","data_busy"));return@withTimeout }
-                            selected=null;pendingDestination=null;navigation.reset()
+                            selected=null;recommendedRoute=null;pendingDestination=null;navigation.reset()
                             model.findNearby()
                             val state=model.uiState.first { !it.busy }
                             if(!state.nearbyCompleted || state.nearbyError!=null) completeVoice(GleoSosContract.reply("fail","Nearby restroom lookup could not be completed. Check location and prepared facility data.","nearby_failed"))
@@ -268,13 +302,20 @@ class PublicDataProbeActivity : ComponentActivity() {
     }
 
     private suspend fun handleVoiceSelection(request: GleoSosContract.Request) {
-        val previous=pendingDestination
+        if (request.operation == "NAVIGATE" && recommendedRoute != null) {
+            completeVoice(GleoSosContract.reply("fail",
+                "Use the waypoint button for the recommended parking lot to keep the current destination.",
+                "recommendation_waypoint_only"))
+            return
+        }
+        val previous=pendingDestination?.takeUnless { it.asWaypoint }
         val choice=chooseDestination(request.index ?: previous?.index,request.target ?: previous?.target,request.listId)
         if(choice==null) {
             completeVoice(GleoSosContract.reply("asking","Select an available candidate number from the current SOS results. A parking destination requires a linked parking lot.","candidate_unavailable",GleoSosContract.results(model.uiState.value).data));return
         }
         selected=choice.candidate
         if(request.operation=="SELECT") {
+            recommendedRoute = null
             navigation.reset()
             pendingDestination=null
             completeVoice(GleoSosContract.results(model.uiState.value,choice.index));return
@@ -283,7 +324,7 @@ class PublicDataProbeActivity : ComponentActivity() {
             pendingDestination=choice
             val data=org.json.JSONArray().put(org.json.JSONObject().put("index",choice.index).put("listId",choice.listId)
                 .put("target",choice.target).put("name",choice.facility.name.take(200)).put("missingField","confirmed").put("confirmationRequired",true)).toString()
-            completeVoice(GleoSosContract.reply("asking","Confirm navigation to ${choice.facility.name.take(200)}. This may replace the current destination. Facility opening, parking vacancy and road entrance are unverified.","navigation_confirmation",data));return
+            completeVoice(GleoSosContract.reply("asking","Confirm navigation to ${choice.facility.name.take(200)}. If guidance is active, this adds a waypoint and keeps the current destination. Facility opening, parking vacancy and road entrance are unverified.","navigation_confirmation",data));return
         }
         pendingDestination=null
         val budget=(request.deadline-SystemClock.elapsedRealtime()).coerceAtLeast(1)
@@ -294,8 +335,13 @@ class PublicDataProbeActivity : ComponentActivity() {
             }
         }
         completeVoice(GleoSosContract.reply(if(outcome.first) "success" else "fail",
-            if(outcome.first) "The selected destination was confirmed by Navigation. Route completion and guidance start are not confirmed."
-            else "The navigation destination could not be confirmed. It may already have been requested; check Navigation before retrying.",outcome.second))
+            when {
+                outcome.first && outcome.second == "waypoint_confirmed" ->
+                    "The selected stop was confirmed as the next waypoint. The original destination was preserved."
+                outcome.first ->
+                    "The selected destination was confirmed by Navigation. Route completion and guidance start are not confirmed."
+                else -> "The navigation request could not be confirmed. Check Navigation before retrying."
+            },outcome.second))
     }
 
     private fun completeVoice(reply: GleoReply) {
@@ -321,7 +367,7 @@ class PublicDataProbeActivity : ComponentActivity() {
                 // start() first reports unknown=false. Keep settled data until a real transition.
                 if(previouslyAllowed) {
                     if(voiceJob?.isActive==true) cancelVoice("vehicle_restricted")
-                    pendingDestination=null;selected=null;model.cancel();navigation.leave()
+                    pendingDestination=null;selected=null;recommendedRoute=null;model.cancel();navigation.leave()
                 }
             } else startPendingVoice()
         }.also { it.start() }

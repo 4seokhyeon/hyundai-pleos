@@ -231,11 +231,11 @@ class VideoProbeActivity : ComponentActivity() {
             sendGleoReply(this, GleoReply.asking(), request.diagnostic)
             return
         }
-        if (request.function == GleoSearchContract.SELECT_ACTION && request.index == null) {
-            sendGleoReply(this, GleoReply.askingSelection(), request.diagnostic)
+        if (request.selectsSong && request.index == null) {
+            sendGleoReply(this, GleoReply.askingSelection().copy(functionName = request.function), request.diagnostic)
             return
         }
-        pendingSelection = if (request.function == GleoSearchContract.SELECT_ACTION) searchModel.uiState.value.songs else null
+        pendingSelection = if (request.selectsSong) searchModel.uiState.value.songs else null
         pendingGleoQuery = request.query
         gleoSearchStarted = false
         gleoSession = GleoSearchSession(applicationContext, request) {
@@ -267,7 +267,7 @@ class VideoProbeActivity : ComponentActivity() {
             finishGleo(GleoReply.fail("The song search action has expired. Please try again.", reason = "action_expired"))
             return
         }
-        if (session.request.function == GleoSearchContract.SELECT_ACTION) {
+        if (session.request.selectsSong) {
             val snapshot = pendingSelection
             val current = searchModel.uiState.value.songs
             val index = session.request.index ?: return

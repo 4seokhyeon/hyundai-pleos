@@ -121,7 +121,7 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
 
 @Composable private fun SearchField(search: SongSearchUiState,enabled: Boolean,onEdit: (String)->Unit,onSearch: ()->Unit) {
     Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-        OutlinedTextField(search.query,onEdit,Modifier.weight(1f).heightIn(min=88.dp),enabled=enabled,textStyle=MaterialTheme.typography.bodyLarge,singleLine=true,placeholder={Text("웅키 채널에서 곡명·가수 검색")},
+        OutlinedTextField(search.query,onEdit,Modifier.weight(1f).heightIn(min=88.dp),enabled=enabled,textStyle=MaterialTheme.typography.bodyLarge,singleLine=true,placeholder={Text("곡명·가수 검색")},
             leadingIcon={Glyph("search",C.Muted)},shape=RoundedCornerShape(20.dp),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),keyboardActions=KeyboardActions(onSearch={if(enabled) onSearch()}))
         Action("검색",enabled=enabled,icon="search",onClick=onSearch)
     }

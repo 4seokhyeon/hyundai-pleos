@@ -54,7 +54,7 @@ class SongSearchViewModel(application: Application) : AndroidViewModel(applicati
         }
         // Set busy synchronously so a second command cannot launch a concurrent search.
         mutableState.update { it.copy(query = query, busy = true, listening = false, speechTranscript = null, error = null,
-            songs = emptyList(), message = "Gleo에서 전달받은 곡을 웅키 채널에서 검색 중") }
+            songs = emptyList(), message = "Gleo에서 전달받은 곡을 검색 중") }
         work = viewModelScope.launch {
             try {
                 val songs = performSearch(query, canPublish)

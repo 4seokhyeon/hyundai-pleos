@@ -15,9 +15,16 @@ object GleoSearchContract {
     const val QUALIFIED_ACTION = "com.shsh.pleos.playground.SEARCH_SONG"
     const val SELECT_ACTION = "SELECT_SONG"
     const val QUALIFIED_SELECT_ACTION = "com.shsh.pleos.playground.SELECT_SONG"
+    const val CONTROL_ACTION = "CONTROL_KARAOKE"
+    const val QUALIFIED_CONTROL_ACTION = "com.shsh.pleos.playground.CONTROL_KARAOKE"
+    private const val OPERATION = "operation"
+    private const val SELECT = "SELECT"
+    private const val OPEN_HOME = "OPEN_HOME"
+
     fun functionName(action: String?): String? = when (action) {
         ACTION, QUALIFIED_ACTION -> ACTION
         SELECT_ACTION, QUALIFIED_SELECT_ACTION -> SELECT_ACTION
+        CONTROL_ACTION, QUALIFIED_CONTROL_ACTION -> CONTROL_ACTION
         else -> null
     }
     fun matchesAction(action: String?): Boolean = functionName(action) != null
@@ -34,7 +41,9 @@ object GleoSearchContract {
     const val BUDGET_MS = 6_000L // Gleo's documented action timeout is 7 seconds.
     private const val MAX_PACKED = 4_096
 
-    data class Request(val id: String, val query: String?, val deadline: Long, val diagnostic: Boolean, val function: String = ACTION, val index: Int? = null)
+    data class Request(val id: String, val query: String?, val deadline: Long, val diagnostic: Boolean, val function: String = ACTION, val index: Int? = null, val opensHome: Boolean = false) {
+        val selectsSong: Boolean get() = !opensHome && (function == SELECT_ACTION || function == CONTROL_ACTION)
+    }
     sealed interface Input {
         data class Accepted(val request: Request) : Input
         data object Invalid : Input
@@ -46,7 +55,8 @@ object GleoSearchContract {
     /** The guide describes both individual extras and a JSON ACTION_PARAM example. */
     @Suppress("DEPRECATION")
     fun readPublic(intent: Intent): Input = try {
-        if (functionName(intent.action) == SELECT_ACTION) readSelection(intent)
+        val function = functionName(intent.action)
+        if (function == SELECT_ACTION || function == CONTROL_ACTION) readControl(intent, function)
         else if (!matchesAction(intent.action)) Input.Invalid
         else {
             val extras = intent.extras
@@ -79,9 +89,11 @@ object GleoSearchContract {
     } catch (_: Exception) { Input.Invalid }
 
     @Suppress("DEPRECATION")
-    private fun readSelection(intent: Intent): Input {
+    private fun readControl(intent: Intent, function: String): Input {
         val extras = intent.extras
         var index: Int? = null
+        val hasOperation = extras?.containsKey(OPERATION) == true
+        var operation = if (hasOperation) parseOperation(extras?.get(OPERATION)) else null
         var supplied = false
         if (extras?.containsKey("index") == true) {
             index = parseIndex(extras.get("index")); supplied = true
@@ -92,14 +104,29 @@ object GleoSearchContract {
             var decoded = decode(raw)
             if (decoded is String) decoded = decode(decoded)
             val packed = decoded as? JSONObject ?: throw IllegalArgumentException()
+            if (packed.has(OPERATION)) {
+                val next = parseOperation(packed.opt(OPERATION))
+                require(!hasOperation || operation == next)
+                operation = next
+            }
             if (packed.has("index")) {
                 val next = parseIndex(packed.opt("index"))
                 if (supplied && index != next) throw IllegalArgumentException()
                 index = next
             }
         }
+        // A cached legacy SELECT_SONG schema may still send an index without an operation.
+        val opensHome = function == CONTROL_ACTION && operation == OPEN_HOME
+        require(if (function == CONTROL_ACTION) operation != null else operation == null || operation == SELECT)
+        require(!opensHome || index == null)
         return Input.Accepted(Request(UUID.randomUUID().toString(), null,
-            SystemClock.elapsedRealtime() + BUDGET_MS, diagnostic(intent), SELECT_ACTION, index))
+            SystemClock.elapsedRealtime() + BUDGET_MS, diagnostic(intent), function, index, opensHome))
+    }
+
+    private fun parseOperation(value: Any?): String {
+        val operation = value as? String ?: throw IllegalArgumentException()
+        require(operation == SELECT || operation == OPEN_HOME)
+        return operation
     }
 
     private fun parseIndex(value: Any?): Int? {
@@ -127,7 +154,7 @@ object GleoSearchContract {
             val id = intent.getStringExtra(REQUEST_ID) ?: return null
             UUID.fromString(id)
             val function = intent.getStringExtra(FUNCTION) ?: ACTION
-            require(function == ACTION || function == SELECT_ACTION)
+            require(function == ACTION || function == SELECT_ACTION || function == CONTROL_ACTION)
             val index = if (intent.hasExtra(INDEX)) parseIndex(intent.getIntExtra(INDEX, 0)) else null
             Request(id, normalize(intent.getStringExtra(PARAMETER)), intent.getLongExtra(DEADLINE, 0), diagnostic(intent), function, index)
         } catch (_: Exception) { null }
