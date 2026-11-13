@@ -1,0 +1,44 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <queries>
+        <package android:name="ai.umos.ambientai" />
+    </queries>
+    <application android:networkSecurityConfig="@xml/debug_network_security_config">
+        <activity android:name=".PlayerRenderProbeActivity" android:exported="false" />
+        <activity android:name=".SosOverlaySetupActivity" android:exported="false"
+            android:enabled="${gleoSosOverlayProbeEnabled}" />
+        <service android:name=".SosOverlayService" android:exported="false"
+            android:enabled="${gleoSosOverlayProbeEnabled}" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started parked emulator validation of restroom SOS navigation overlay" />
+        </service>
+        <receiver
+            android:name=".GleoSosOverlayProbeReceiver"
+            android:enabled="${gleoSosOverlayProbeEnabled}"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="RESTROOM_SOS" />
+                <action android:name="com.shsh.pleos.playground.RESTROOM_SOS" />
+                <action android:name="CHECK_SOS_OVERLAY" />
+                <action android:name="com.shsh.pleos.playground.CHECK_SOS_OVERLAY" />
+            </intent-filter>
+        </receiver>
+        <!-- Replace the public Activity boundary so cached SOS activity calls cannot open the app. -->
+        <activity android:name=".GleoEntryActivity" android:exported="true"
+            android:excludeFromRecents="true" android:theme="@android:style/Theme.NoDisplay"
+            tools:node="replace">
+            <intent-filter>
+                <action android:name="SEARCH_SONG" />
+                <action android:name="com.shsh.pleos.playground.SEARCH_SONG" />
+                <action android:name="CONTROL_KARAOKE" />
+                <action android:name="com.shsh.pleos.playground.CONTROL_KARAOKE" />
+                <action android:name="SELECT_SONG" />
+                <action android:name="com.shsh.pleos.playground.SELECT_SONG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
