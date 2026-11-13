@@ -55,12 +55,23 @@
     {
       "type": "function",
       "function": {
-        "name": "CHECK_SOS_OVERLAY",
-        "description": "Checks the Noraehaja restroom SOS voice connection without opening the app, looking up a location, or changing navigation.",
+        "name": "RESTROOM_SOS",
+        "description": "Finds nearby restroom and parking pairs during active navigation without opening the app. Shows up to three options to choose as the next waypoint; a single fully evaluated option is added automatically. Driving ETA is compared, but route detour and parking vacancy are unverified.",
         "component": "service",
         "parameters": {
           "type": "object",
-          "properties": {}
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "FIND"
+              ],
+              "description": "FIND searches restroom parking options and prepares a stop while preserving the current navigation destination."
+            }
+          },
+          "required": [
+            "operation"
+          ]
         }
       }
     }

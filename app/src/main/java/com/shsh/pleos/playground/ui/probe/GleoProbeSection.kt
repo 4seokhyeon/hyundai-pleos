@@ -40,6 +40,9 @@ fun GleoProbeSection() {
     }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Gleo 노래 검색 연결 · 로컬 검증", style = MaterialTheme.typography.titleLarge)
+        if (BuildConfig.SOS_OVERLAY_ENABLED) Action("화면 없는 화장실 SOS 준비", secondary = true, onClick = {
+            context.startActivity(Intent().setClassName(context.packageName, "${context.packageName}.SosOverlaySetupActivity"))
+        })
         Text("실제 Gleo 음성 호출이나 스키마 승인을 확인하는 메뉴는 아니에요. 동일한 앱 진입점과 검색 UI를 확인하며 Gleo로 Callback을 보내지 않아요.")
         Text("외부 명령 수신 상태", style = MaterialTheme.typography.titleMedium)
         Text(externalState)

@@ -4,18 +4,27 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import android.content.Intent
+import org.json.JSONArray
+import org.json.JSONObject
 import com.shsh.pleos.playground.gleo.GleoDiagnostics
 import com.shsh.pleos.playground.gleo.GleoReply
 import com.shsh.pleos.playground.gleo.GleoSearchContract
 import com.shsh.pleos.playground.gleo.sendGleoReply
 
-/** Exported search/numbered playback boundary. No recording, STT, or arbitrary routing. */
+/** Exported Gleo boundary. Only registered app actions can be forwarded. */
 class GleoEntryActivity : ComponentActivity() {
     private fun handleSos() {
         val contract = com.shsh.pleos.playground.gleo.GleoSosContract
         val diagnostic = GleoSearchContract.diagnostic(intent)
         if (!diagnostic) GleoDiagnostics.externalEntry(true)
         Log.i("SHSH_GLEO", "Entry opened; action=RESTROOM_SOS, diagnostic=$diagnostic; values omitted")
+        if (BuildConfig.SOS_OVERLAY_ENABLED) {
+            Log.w("SHSH_SOS_PROBE", "Legacy SOS Activity request rejected; refresh Gleo schema to component=service")
+            sendGleoReply(this, contract.reply("fail",
+                "Refresh the Gleo app schema before using the headless restroom SOS service.", "overlay_stale_activity_schema"), diagnostic)
+            return
+        }
         val request = try { contract.readPublic(intent) }
         catch (_: Exception) {
             sendGleoReply(this, contract.reply("fail", "Supply a valid SOS operation and candidate number.", "invalid_parameters"), diagnostic)
@@ -30,6 +39,20 @@ class GleoEntryActivity : ComponentActivity() {
             Log.w("SHSH_GLEO", "SOS workspace launch failed; type=${error.javaClass.simpleName}; values omitted")
             sendGleoReply(this, contract.reply("fail", "The SOS screen could not be opened.", "workspace_launch_failed"), diagnostic)
         }
+    }
+
+    private fun openAppHome(request: GleoSearchContract.Request) {
+        val reply = try {
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            GleoReply("success", "Opening the Noraehaja app home screen.",
+                JSONArray().put(JSONObject().put("destination", "app_home")).toString(),
+                reason = "home_launch_requested", functionName = request.function)
+        } catch (error: Exception) {
+            Log.w("SHSH_GLEO", "Home launch failed; type=${error.javaClass.simpleName}")
+            GleoReply.fail("The Noraehaja app home screen could not be opened.", reason = "home_launch_failed")
+                .copy(functionName = request.function)
+        }
+        sendGleoReply(this, reply, request.diagnostic)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,12 +74,13 @@ class GleoEntryActivity : ComponentActivity() {
             }
             when (val input = GleoSearchContract.readPublic(intent)) {
                 GleoSearchContract.Input.Invalid -> sendGleoReply(this,
-                    GleoReply.fail("The search parameters are invalid. Supply a valid query or a positive integer result index.", reason = "invalid_parameters").copy(functionName = function), diagnostic)
+                    GleoReply.fail("The command parameters are invalid. Supply a valid query, operation, or positive integer result index as required.", reason = "invalid_parameters").copy(functionName = function), diagnostic)
                 is GleoSearchContract.Input.Accepted -> {
                     val request = input.request
                     Log.i("SHSH_GLEO", "Command received; action=${request.function}, hasQuery=${request.query != null}, diagnostic=$diagnostic; values omitted")
-                    if (request.function == GleoSearchContract.SELECT_ACTION && request.index == null)
-                        sendGleoReply(this, GleoReply.askingSelection(), diagnostic)
+                    if (request.opensHome) openAppHome(request)
+                    else if (request.selectsSong && request.index == null)
+                        sendGleoReply(this, GleoReply.askingSelection().copy(functionName = request.function), diagnostic)
                     else if (request.function == GleoSearchContract.ACTION && request.query == null) sendGleoReply(this, GleoReply.asking(), diagnostic)
                     else if (Build.VERSION.SDK_INT < 29) sendGleoReply(this, GleoReply.fail("This search screen requires Android 10 or later.", reason = "unsupported_android").copy(functionName = function), diagnostic)
                     else try { startActivity(GleoSearchContract.forward(this, request)) }
