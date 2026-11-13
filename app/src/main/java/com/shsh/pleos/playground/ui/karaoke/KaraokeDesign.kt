@@ -246,7 +246,7 @@ fun KaraokeHome(onStart: () -> Unit,onDiagnostics: () -> Unit,onVoice: () -> Uni
         }
         val copy: @Composable ()->Unit = {
             Column(verticalArrangement=Arrangement.spacedBy(20.dp)) {
-                Eyebrow("VOCAL REVIEW"); Text("AI 재미 점수",style=MaterialTheme.typography.headlineLarge); Chip(condition,C.Mint)
+                Eyebrow("VOCAL REVIEW"); Text("채점 결과 점수",style=MaterialTheme.typography.headlineLarge); Chip(condition,C.Mint)
                 Notice("공모전 시연용 환산 점수예요","원곡의 음정·박자 정확도나 가창 실력 점수가 아니에요. 반주와 녹음 환경에 따라 달라질 수 있어요.")
                 FlowRow(horizontalArrangement=Arrangement.spacedBy(14.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) { Action("곡 목록으로",secondary=true,onClick=onList); Action("한 번 더 부르기",icon="mic",onClick=onAgain) }
             }

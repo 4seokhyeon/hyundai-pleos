@@ -144,7 +144,8 @@ class PublicDataProbeActivity : ComponentActivity() {
                                 pendingDestination=null
                                 if(allowed && choiceIsCurrent(choice)) navigation.send(choice.facility,
                                     {allowed && resumed && choiceIsCurrent(choice)}, asWaypoint = choice.asWaypoint,
-                                    expectedRoute = choice.expectedRoute)
+                                    expectedRoute = choice.expectedRoute,
+                                    onResult = { success, _ -> if (success) returnHomeAfterNavigation() })
                                 else navigation.report("목적지를 다시 선택해 주세요. 현재 목록과 차량 허용 상태를 확인하세요.")
                             }){Text(if (choice.asWaypoint) "경유지로 추가" else "안내 요청")}},
                             dismissButton={TextButton(onClick={pendingDestination=null}){Text("취소")}})
@@ -227,6 +228,7 @@ class PublicDataProbeActivity : ComponentActivity() {
 
     private fun acceptVoiceIntent(incoming: Intent) {
         val request=GleoSosContract.takeForwarded(incoming) ?: return
+        SosHomeReturn.clear(this)
         if(voiceRequest!=null || navigation.state.value.busy) {
             sendGleoReply(this,GleoSosContract.reply("fail","An SOS action is already in progress.","action_busy"),request.diagnostic)
             return
@@ -342,6 +344,29 @@ class PublicDataProbeActivity : ComponentActivity() {
                     "The selected destination was confirmed by Navigation. Route completion and guidance start are not confirmed."
                 else -> "The navigation request could not be confirmed. Check Navigation before retrying."
             },outcome.second))
+        if (outcome.first) returnHomeAfterNavigation()
+    }
+
+    private fun returnHomeAfterNavigation() {
+        pendingDestination = null
+        selected = null
+        recommendedRoute = null
+        model.cancel()
+        SosHomeReturn.mark(this)
+        Log.i("SHSH_SOS", "Navigation confirmed; SOS cleared; home return pending, foreground=$resumed")
+        if (resumed) openHomeAfterNavigation()
+    }
+
+    private fun openHomeAfterNavigation() {
+        if (isFinishing || isDestroyed) return
+        try {
+            // CLEAR_TOP recreates the standard MainActivity and removes any old
+            // karaoke/SOS screens above it. Never start it while Navigation is foreground.
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish()
+        } catch (error: Exception) {
+            Log.w("SHSH_SOS", "Home return failed; type=${error.javaClass.simpleName}")
+        }
     }
 
     private fun completeVoice(reply: GleoReply) {
@@ -360,6 +385,10 @@ class PublicDataProbeActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumed=true;allowed=false
+        if (SosHomeReturn.pending(this)) {
+            openHomeAfterNavigation()
+            return
+        }
         monitor=DrivingRestrictionsMonitor(this) { permit,_ ->
             val previouslyAllowed=allowed
             allowed=permit

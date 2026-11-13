@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        SosHomeReturn.clear(this)
         homeAllowed = false
         homeMonitor = com.shsh.pleos.playground.platform.DrivingRestrictionsMonitor(this) { permit, _ -> homeAllowed = permit }.also { it.start() }
     }
